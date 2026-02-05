@@ -103,45 +103,6 @@ if (!params.aligned) {
         }
     }
 
-    /*
-        Update 251223: "oldSS" option discontinued - use older version of script instead. 
-
-        Different naming schemes during imnplementation
-
-        params.oldSS (initial setup during testing): 
-        - samplesheet contains 3 cols per default: caseid, npn, gender
-        - input files are named npn.runinfo.readset.barcode.bam
-
-        From 251107 to dec 2025:
-        params.intSS (intermediate samplesetup):
-        - samplesheet contains same 3 cols, or 5 cols for trio/family
-        - input files are named with more comprehensive sampleInfo:
-        Input file structure:
-        sampleInfo.runinfo.readset.barcode.bam, where sampleInfo contains:
-        npn_material_testlist_gender
-
-
-        From december 2025 (run 251205 and onwards):
-        default going forward, if params.oldSS or intSS not set:
-
-        - samplesheet extracted directly from run samplesheets:
-        Strucutre:
-        rekv_npn_material_testlist_gender_proband(T or F)_internalRef (number or noInfo)
-
-        Examples:
-        0000093123_113720841930_78_SL-NGC-SJAELDNE_K_F_noInfo
-        0000093645_113697182321_78_SL-NGC-NYRESVIGT_M_F_113632562421
-        0000093646_113697182186_78_SL-NGC-NYRESVIGT_K_F_113632562421
-        Input bam:
-        same as for intSS:
-        sampleInfo.runinfo.readset.barcode.bam, where sampleInfo contains:
-        npn_material_testlist_gender
-        Example:
-        113618066447_78_NGC-NEUROGENETIK_K.m84313_251205_131758_s1.hifi_reads.bc2049.bam
-    */
-   
-    // default from dec. 5th, 2025:
-
     if (params.samplesheet && !params.intSS && !params.jointSS) {
               
         def ssBase = params.samplesheet
@@ -1016,6 +977,7 @@ workflow.onComplete {
             |set {finalUbamInput}
            
     }
+
 
 
 */
