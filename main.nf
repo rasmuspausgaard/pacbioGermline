@@ -194,16 +194,11 @@ if (!params.aligned) {
     .groupTuple()
     .flatMap { intRef, metas ->
 
-        // Find all probands (allow 1+)
         def probands = metas.findAll { it.proband == 'T' }
         assert probands && probands.size() >= 1 : "No proband (T) found for intRef=${intRef}"
-
-        // Use first proband as "anchor" for caseID (stable across family)
+ 
         def anchor = probands[0]
         def caseID = "${anchor.rekv}_${anchor.testlist}_${intRef}"
-
-        // Optional sanity checks (enable if you want strictness)
-        // assert metas.every { it.intRef == intRef } : "Mixed intRef values in group: ${intRef}"
 
         metas.collect { m ->
             def relation
@@ -215,7 +210,6 @@ if (!params.aligned) {
                 relation = 'mater'
             } else {
                 relation = 'unknown_relation'
-                // Or: assert false : "Cannot infer parent role (gender=${m.gender}) for intRef=${intRef}, npn=${m.npn}"
             }
 
             // Return NEW map (don’t mutate original)
@@ -981,3 +975,4 @@ workflow.onComplete {
 
 
 */
+
