@@ -143,22 +143,22 @@ The script is run locally by default, but can use the SLURM cluster by adding "-
 ## Usage examples
 
 #### Default: Analyze all samples in default samplesheet. Use all unmapped bam files available (across multiple SMRTcells) for each sample. Run all default analysis steps:
-    nextflow run MadsAagaard/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt
+    nextflow run KGVejle/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt
 
 #### Default: Same as above, but use SLURM to execute the script:
-    nextflow run MadsAagaard/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt -profile slurm
+    nextflow run KGVejle/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt -profile slurm
 
 #### Same as above, but skip QC and Structural variantcalling:
-    nextflow run MadsAagaard/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt  -profile slurm --skipQC --skipSV
+    nextflow run KGVejle/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt  -profile slurm --skipQC --skipSV
 
 #### Default: Trio analysis, run exomiser using hpo.txt:
-    nextflow run MadsAagaard/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt -profile slurm --hpo /path/to/hpo.txt --jointSS
+    nextflow run KGVejle/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt -profile slurm --hpo /path/to/hpo.txt --jointSS
 
 #### Analyze all samples in custom samplesheet. Run joint genotyping for DeepVariant and Sawfish, use SLURM to execute the script:
-    nextflow run MadsAagaard/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt --jointCall --profile slurm
+    nextflow run KGVejle/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt --jointCall --profile slurm
 
 #### Analyze samples in default samplesheet. Use only unmapped bam files available in subfolders under /input: for each sample. Run all default analysis steps:
-    nextflow run MadsAagaard/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt --input /path/to/selected/rawData/
+    nextflow run KGVejle/pacbioGermline -r main --samplesheet /path/to/samplesheet.txt --input /path/to/selected/rawData/
 
 
 # Output
