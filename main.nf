@@ -5,6 +5,8 @@ date=new Date().format( 'yyMMdd' )
 user="$USER"
 runID="${date}.${user}"
 
+params.vspipeline_testlist = params.vspipeline_testlist ?: 'SL_NGC_HJERTESYGDOM'
+
 //////////// DEFAULT INPUT ///////////////////////
 
 def inputError() {
@@ -410,6 +412,8 @@ include {pbmm2_align;
         //collect_versions;
         } from "./modules/dnaModules.nf" 
 
+include { VSpipeline } from "./modules/vspipeline.nf"
+
 
 puretargetPlotGenes=["SCA1_ATXN1",
                      "SCA2_ATXN2",
@@ -674,6 +678,19 @@ workflow {
                 starphase(phasedAll)
                 svTopo(phasedAll)
                 svdb_SawFish(phasedAll)
+
+                phasedAll
+                .join(svdb_SawFish.out.sawfishAF10)
+                | map { meta, data, sv10_vcf, sv10_idx ->
+                    tuple(meta, data + [sawfish10_vcf: sv10_vcf, sawfish10_idx: sv10_idx])
+                }
+                | filter { meta, data ->
+                    def normalizedTestlist = (meta.testlist ?: '').toString().replaceAll('-', '_')
+                    normalizedTestlist == params.vspipeline_testlist
+                }
+                | set { vspipeline_input_ch }
+
+                VSpipeline(vspipeline_input_ch)
             }
 
             hiPhase.out.hiphase_bam
