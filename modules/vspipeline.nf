@@ -97,6 +97,7 @@ EOF
       --bind /data/shared/VarSeq/:/appdata \
       --bind /lnx01_data2:/lnx01_data2 \
       --bind /lnx01_data3:/lnx01_data3 \
+      --bind /fast:/fast \
       ${params.vs_sif} \
       bash -lc 'test -f '"${vcf_path}"' && echo CONTAINER_VCF_FOUND || echo CONTAINER_VCF_MISSING; \
                 test -f '"${bnd_vcf_path}"' && echo CONTAINER_BND_VCF_FOUND || echo CONTAINER_BND_VCF_MISSING; \
@@ -108,6 +109,7 @@ EOF
       --bind /data/shared/VarSeq/:/data/shared/VarSeq \
       --bind /lnx01_data2:/lnx01_data2 \
       --bind /lnx01_data3:/lnx01_data3 \
+      --bind /fast:/fast \
       ${params.vs_sif} \
       -c login ${params.user_email} ${params.user_login} \
       -c license_activate ${params.license_key} \
