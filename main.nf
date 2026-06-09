@@ -5,7 +5,6 @@ date=new Date().format( 'yyMMdd' )
 user="$USER"
 runID="${date}.${user}"
 
-params.vspipeline_testlist = params.vspipeline_testlist ?: 'SL_NGC_HJERTESYGDOM'
 
 //////////// DEFAULT INPUT ///////////////////////
 
@@ -679,14 +678,48 @@ workflow {
                 svTopo(phasedAll)
                 svdb_SawFish(phasedAll)
 
+                /*
+                 * VarSeq import is controlled by params.vspipeline_configs in
+                 * modules/vspipeline.nf or an included config. By default, any
+                 * sample whose normalized testlist exists in that map is sent to
+                 * VSpipeline. Optional --vspipeline_testlist can still be used as
+                 * a single-testlist debug/override filter.
+                 */
                 phasedAll
                 .join(svdb_SawFish.out.sawfishAF10)
                 | map { meta, data, sv10_vcf, sv10_idx ->
                     tuple(meta, data + [sawfish10_vcf: sv10_vcf, sawfish10_idx: sv10_idx])
                 }
                 | filter { meta, data ->
-                    def normalizedTestlist = (meta.testlist ?: '').toString().replaceAll('-', '_')
-                    normalizedTestlist == params.vspipeline_testlist
+                    def normalizedTestlist = (meta.testlist ?: '')
+                        .toString()
+                        .trim()
+                        .replaceAll('-', '_')
+
+                    def requestedTestlist = (params.vspipeline_testlist ?: '')
+                        .toString()
+                        .trim()
+                        .replaceAll('-', '_')
+
+                    if (requestedTestlist) {
+                        return normalizedTestlist == requestedTestlist
+                    }
+
+                    def configuredVspipelineTestlists = (params.vspipeline_configs ?: [
+                        SL_NGC_HJERTESYGDOM : [:],
+                        SL_NGC_UNGE_VOKSNE  : [:],
+                        SL_NGC_ARVELIG_KRFT : [:],
+                        SL_NGC_NEUROGENETIK : [:],
+                        SL_LWG_GENOM        : [:],
+                        SL_NGC_SJAELDNE     : [:],
+                        SL_NGC_NYRESVIGT    : [:],
+                        SL_NGC_ENDOKRINOLOG : [:],
+                        SL_NGC_OFTALMOLOGI  : [:],
+                        SL_NGC_HUDSYGDOM    : [:],
+                        SL_LWG_CNV          : [:]
+                    ]).keySet()
+
+                    return configuredVspipelineTestlists.contains(normalizedTestlist)
                 }
                 | set { vspipeline_input_ch }
 
