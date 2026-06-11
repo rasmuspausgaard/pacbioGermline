@@ -45,77 +45,77 @@ Because /data/shared/VarSeq is mounted as /appdata, this mapping is:
 
 params.vspipeline_configs = params.vspipeline_configs ?: [
 
-    SL-NGC-HJERTESYGDOM: [
+    SL_NGC_HJERTESYGDOM: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/LRS-WGS Arvelig hjertesygdom v260512.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/ArveligeHjertesygdomme/00_Pacbio',
         project_base_container: '/appdata/projects/WGS_NGC/ArveligeHjertesygdomme/00_Pacbio',
         bnd_table_id: 'BND'
     ],
 
-    SL-NGC-UNGE-VOKSNE: [
+    SL_NGC_UNGE_VOKSNE: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_RUN_KRFT_LRS-WGS_v260529.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/UngeVoksne.ArveligKrft/PacBio/2026',
         project_base_container: '/appdata/projects/WGS_NGC/UngeVoksne.ArveligKrft/PacBio/2026',
         bnd_table_id: 'BND'
     ],
 
-    SL-NGC-ARVELIG-KRFT: [
+    SL_NGC_ARVELIG_KRFT: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_KRFT LRS-WGS v260529.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/UngeVoksne.ArveligKrft/PacBio/2026',
         project_base_container: '/appdata/projects/WGS_NGC/UngeVoksne.ArveligKrft/PacBio/2026',
         bnd_table_id: 'Breakends'
     ],
 
-    SL-NGC-NEUROGENETIK: [
+    SL_NGC_NEUROGENETIK: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_LRS-WGS v260529.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/Neurogenetiske sygdomme/LRS/2026',
         project_base_container: '/appdata/projects/WGS_NGC/Neurogenetiske sygdomme/LRS/2026',
         bnd_table_id: 'BND'
     ],
 
-    SL-LWG-GENOM: [
+    SL_LWG_GENOM: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_LRS-WGS v260529.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS/PacBio/2026',
         project_base_container: '/appdata/projects/WGS/PacBio/2026',
         bnd_table_id: 'BND'
     ],
 
-    SL-NGC-SJAELDNE: [
+    SL_NGC_SJAELDNE: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_LRS-WGS v260530.2.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/Sjaeldne.sygdomme/Pacbio/2026',
         project_base_container: '/appdata/projects/WGS_NGC/Sjaeldne.sygdomme/Pacbio/2026',
         bnd_table_id: 'Breakends'
     ],
 
-    SL-NGC-NYRESVIGT: [
+    SL_NGC_NYRESVIGT: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_LRS-WGS v260530.2.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/Kronisk nyresvigt/PacBio_LRS/2026',
         project_base_container: '/appdata/projects/WGS_NGC/Kronisk nyresvigt/PacBio_LRS/2026',
         bnd_table_id: 'Breakends'
     ],
 
-    SL-NGC-ENDOKRINOLOG: [
+    SL_NGC_ENDOKRINOLOG: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_LRS-WGS v260530.2.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/Endokrinologi/2026',
         project_base_container: '/appdata/projects/WGS_NGC/Endokrinologi/2026',
         bnd_table_id: 'Breakends'
     ],
 
-    SL-NGC-OFTALMOLOGI: [
+    SL_NGC_OFTALMOLOGI: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_LRS-WGS v260530.2.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/Oftalmologi/PacBio/2026',
         project_base_container: '/appdata/projects/WGS_NGC/Oftalmologi/PacBio/2026',
         bnd_table_id: 'Breakends'
     ],
 
-    SL-NGC-HUDSYGDOM: [
+    SL_NGC_HUDSYGDOM: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_LRS-WGS v260530.2.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/Dermatology/2026',
         project_base_container: '/appdata/projects/WGS_NGC/Dermatology/2026',
         bnd_table_id: 'Breakends'
     ],
 
-    SL-LWG-CNV: [
+    SL_LWG_CNV: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN LRS CNV v260324.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS CNV/2026',
         project_base_container: '/appdata/projects/WGS CNV/2026',
