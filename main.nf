@@ -706,17 +706,17 @@ workflow {
                     }
 
                     def configuredVspipelineTestlists = (params.vspipeline_configs ?: [
-                        SL_NGC_HJERTESYGDOM : [:],
-                        SL_NGC_UNGE_VOKSNE  : [:],
-                        SL_NGC_ARVELIG_KRFT : [:],
-                        SL_NGC_NEUROGENETIK : [:],
-                        SL_LWG_GENOM        : [:],
-                        SL_NGC_SJAELDNE     : [:],
-                        SL_NGC_NYRESVIGT    : [:],
-                        SL_NGC_ENDOKRINOLOG : [:],
-                        SL_NGC_OFTALMOLOGI  : [:],
-                        SL_NGC_HUDSYGDOM    : [:],
-                        SL_LWG_CNV          : [:]
+                        SL-NGC-HJERTESYGDOM : [:],
+                        SL-NGC-UNGE-VOKSNE  : [:],
+                        SL-NGC-ARVELIG-KRFT : [:],
+                        SL-NGC-NEUROGENETIK : [:],
+                        SL-LWG-GENOM        : [:],
+                        SL-NGC-SJAELDNE     : [:],
+                        SL-NGC-NYRESVIGT    : [:],
+                        SL-NGC-ENDOKRINOLOG : [:],
+                        SL-NGC-OFTALMOLOGI  : [:],
+                        SL-NGC-HUDSYGDOM    : [:],
+                        SL-LWG-CNV          : [:]
                     ]).keySet()
 
                     return configuredVspipelineTestlists.contains(normalizedTestlist)
