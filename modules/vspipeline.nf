@@ -63,7 +63,7 @@ params.vspipeline_configs = params.vspipeline_configs ?: [
         template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV NPN RUN KRFT LRS-WGS v260529.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/UngeVoksne.ArveligKrft/PacBio/2026',
         project_base_container: '/appdata/projects/WGS_NGC/UngeVoksne.ArveligKrft/PacBio/2026',
-        bnd_table_id: 'Breakends'
+        bnd_table_id: 'BND'
     ],
 
     SL_NGC_NEUROGENETIK: [
