@@ -53,14 +53,14 @@ params.vspipeline_configs = params.vspipeline_configs ?: [
     ],
 
     SL_NGC_UNGE_VOKSNE: [
-        template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_RUN_KRFT_LRS-WGS_v260529.vsproject-template',
+        template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV NPN RUN KRFT LRS-WGS v260529.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/UngeVoksne.ArveligKrft/PacBio/2026',
         project_base_container: '/appdata/projects/WGS_NGC/UngeVoksne.ArveligKrft/PacBio/2026',
         bnd_table_id: 'BND'
     ],
 
     SL_NGC_ARVELIG_KRFT: [
-        template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_KRFT LRS-WGS v260529.vsproject-template',
+        template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV NPN RUN KRFT LRS-WGS v260529.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/UngeVoksne.ArveligKrft/PacBio/2026',
         project_base_container: '/appdata/projects/WGS_NGC/UngeVoksne.ArveligKrft/PacBio/2026',
         bnd_table_id: 'Breakends'
