@@ -29,6 +29,7 @@ workflow PRE_PHASING {
     sawfish_vcf_ch      = Channel.empty()
     str_vcf_ch          = Channel.empty()
     hiphase_input_ch    = Channel.empty()
+    mirror_items_ch     = Channel.empty()
 
     if (!params.skipVariants) {
         deepvariant(aligned)
@@ -39,6 +40,8 @@ workflow PRE_PHASING {
         deepvariant.out.dv_gvcf
             | map {meta,vcf,idx -> tuple(meta,[vcf,idx])}
             | set {dv_gvcf_ch}
+
+        mirror_items_ch = mirror_items_ch.mix(deepvariant.out.dv_gvcf.map { meta, gvcf, tbi -> tuple(meta, 'SNV_and_INDELs/gvcf', [gvcf, tbi]) })
         
         if (params.jointCall || params.jointSS) {
             deepvariant.out.dv_gvcf
@@ -63,6 +66,10 @@ workflow PRE_PHASING {
         sawFish2.out.sv_vcf //meta, vcf, idx
             | map {meta,vcf,idx -> tuple(meta,[vcf,idx])}
             | set {sawfish_vcf_ch}
+
+        mirror_items_ch = mirror_items_ch.mix(sawFish2.out[0].map { meta, files -> tuple(meta, "structuralVariants/${meta.id}.sawfishSV/supportingFiles", files) })
+        mirror_items_ch = mirror_items_ch.mix(sawFish2.out.sv_supporting_reads.map { meta, json -> tuple(meta, "structuralVariants/${meta.id}.sawfishSV/supportingFiles", json) })
+        mirror_items_ch = mirror_items_ch.mix(sawFish2.out.sv_discover_dir2.map { meta, discover_dir, bam -> tuple(meta, "structuralVariants/${meta.id}.sawfishSV", discover_dir) })
     }
 
     if (!params.skipSTR) {
@@ -81,6 +88,8 @@ workflow PRE_PHASING {
             |set {trgt4_plot_ch}
 
         trgt4_diseaseSTRs_plots(trgt4_plot_ch)
+        mirror_items_ch = mirror_items_ch.mix(trgt4_diseaseSTRs.out.trgt_full.map { meta, bam, bai, vcf, tbi -> tuple(meta, 'repeatExpansions/TRGT/bam', [bam, bai]) })
+        mirror_items_ch = mirror_items_ch.mix(trgt4_diseaseSTRs_plots.out.map { meta, plots -> tuple(meta, 'repeatExpansions/TRGT/Plots', plots) })
 
 
 
@@ -92,6 +101,7 @@ workflow PRE_PHASING {
 
         // trgt4_diseaseSTRs_plots_meth(trgt4_plot_ch_meth)
         trgt4_diseaseSTRs_plots_meth(trgt4_plot_ch)
+        mirror_items_ch = mirror_items_ch.mix(trgt4_diseaseSTRs_plots_meth.out.map { meta, plots -> tuple(meta, 'repeatExpansions/TRGT/METHplots', plots) })
 
 
 
@@ -103,6 +113,9 @@ workflow PRE_PHASING {
             |set {trgt5_plot_ch}
 
         trgt5_diseaseSTRs_plots(trgt5_plot_ch)
+        mirror_items_ch = mirror_items_ch.mix(trgt5_diseaseSTRs.out.trgt_full.map { meta, bam, bai, vcf, tbi -> tuple(meta, 'newToolsTest/repeatExpansions/TRGT5/bam', [bam, bai]) })
+        mirror_items_ch = mirror_items_ch.mix(trgt5_diseaseSTRs.out.trgt_full.map { meta, bam, bai, vcf, tbi -> tuple(meta, 'newToolsTest/repeatExpansions/TRGT5/diseaseSTRs', [vcf, tbi]) })
+        mirror_items_ch = mirror_items_ch.mix(trgt5_diseaseSTRs_plots.out.map { meta, plots -> tuple(meta, 'newToolsTest/repeatExpansions/TRGT5/Plots', plots) })
 
         trgt5_diseaseSTRs.out.trgt_full
             |map {meta,bam,bai,vcf,tbi -> 
@@ -110,12 +123,16 @@ workflow PRE_PHASING {
             |set {trgt5_plot_ch_meth}
 
         trgt5_diseaseSTRs_plots_meth(trgt5_plot_ch_meth)
+        mirror_items_ch = mirror_items_ch.mix(trgt5_diseaseSTRs_plots_meth.out.map { meta, plots -> tuple(meta, 'newToolsTest/repeatExpansions/TRGT/METHplots', plots) })
         
     }
 
     if (!params.skipQC) {
         mosdepthROI(aligned)
         nanoStat(aligned)
+        mirror_items_ch = mirror_items_ch.mix(mosdepthROI.out.mosdepth_roi.map { meta, files -> tuple(meta, 'QC/mosdepth', files) })
+        mirror_items_ch = mirror_items_ch.mix(mosdepthROI.out.multiqc.map { meta, txt -> tuple(meta, 'QC/mosdepth', txt) })
+        mirror_items_ch = mirror_items_ch.mix(nanoStat.out.multiqc.map { meta, txt -> tuple(meta, 'QC/nanoStat', txt) })
     }
 
     // Assemble hiPhase input — all the pieces exist here already
@@ -140,6 +157,7 @@ workflow PRE_PHASING {
     mosdepth                 = params.skipQC  ? Channel.empty() : mosdepthROI.out.multiqc
     nanoStat                 = params.skipQC  ? Channel.empty() : nanoStat.out.multiqc
     hiphaseInput             = hiphase_input_ch
+    mirror_items             = mirror_items_ch
 }
 
 
