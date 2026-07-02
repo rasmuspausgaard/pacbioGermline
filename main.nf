@@ -2,9 +2,44 @@
 nextflow.enable.dsl = 2
 import java.util.Locale
 date=new Date().format( 'yyMMdd' )
+date2=new Date().format( 'yyMMdd HH:mm:ss' )
 user="$USER"
 runID="${date}.${user}"
 
+params.symlink_mirror_dir = params.symlink_mirror_dir ?: "/lnx01_data2/shared/testdata/storage_symlinks"
+params.symlink_exclude_dirname = params.symlink_exclude_dirname ?: "perSampleStaging"
+
+log.info """\
+======================================================
+Clinical Genetics Vejle: PacBio LRS v4
+======================================================
+Genome        : $params.genome
+GenomeDir     : $refFilesDir
+Input Readset : $inputReadSet_allDefault
+read Subset   : $readSubset_hifiDefault
+RunID         : $runID
+Script start  : $date2
+Genome FASTA  : ${genome_fasta}
+Archive RAW   : ${dataArchive}
+OutputDirBase : ${outputDirBase}
+workDir       : ${workflow.workDir}
+layout        : $params.layoutMode
+min input GB  : $params.minGB
+"""
+
+
+/* ----- Changes:
+
+    - deprecate obsolete versions of programs:
+    - TRGT4, paraphase3, pb-cpgtools, kivvi05
+
+    - Current versions:
+        TRGT5, paraphase4, methBat profile, kivvi v1
+
+    - Remove allReads bam/cram output
+
+
+*/
 
 //////////// DEFAULT INPUT ///////////////////////
 
@@ -21,12 +56,8 @@ def hpoInputError() {
 }
 
 
-
-if (!params.samplesheet && !params.input) exit 0, inputError()
-if (params.vspipelineOnly && !params.samplesheet) exit 0, "USER INPUT ERROR: --vspipelineOnly requires --samplesheet so old output paths can be reconstructed."
-if (!params.samplesheet && params.hpo) exit 0, hpoInputError() 
-
-
+if (!params.samplesheet && !params.input && !params.familySS) exit 0, inputError() 
+if (!params.samplesheet && params.hpo && !params.familySS) exit 0, hpoInputError() 
 
 
 if (params.hpo) {
@@ -35,143 +66,7 @@ if (params.hpo) {
 }
 
 
-
-
-
-
-/*
-================================================================================
- VSpipeline-only mode from the normal samplesheet
-================================================================================
-
-This mode does not run alignment, DeepVariant, Sawfish, HiPhase, SVDB, QC or STR.
-It only parses the normal pacbioGermline samplesheet and reconstructs the expected
-published output paths using params.outBase(meta) and the standard filenames.
-*/
-
-if (params.vspipelineOnly) {
-
-    if (params.samplesheet && !params.intSS && !params.jointSS) {
-
-        def ssBase = params.samplesheet
-                    .toString()
-                    .tokenize('/')
-                    .last()
-                    .replaceFirst(/_metadata$/, '')
-
-        channel.fromPath(params.samplesheet)
-        | splitCsv(sep:'\t')
-        | map { row ->
-            (rekv, npn, material, testlist, gender, proband, intRef) = row[0].tokenize("_")
-            def groupKey = (intRef == 'noInfo') ? "single" : intRef
-            def outKey   = (intRef == 'noInfo') ? "singleSampleAnalysis" : "multiSampleAnalysis"
-            def sex      = (gender == "K") ? "female" : "male"
-            meta = [
-                id       : npn,
-                testlist : testlist,
-                sex      : sex,
-                proband  : proband,
-                intRef   : intRef,
-                rekv     : rekv,
-                groupKey : groupKey,
-                outKey   : outKey,
-                ssBase   : ssBase
-            ]
-            meta
-        }
-        | set { samplesheet_full }
-    }
-
-    if (params.samplesheet && params.intSS) {
-
-        def ssBase = params.samplesheet
-                    .toString()
-                    .tokenize('/')
-                    .last()
-                    .replaceFirst(/\.txt$/, '')
-
-        channel.fromPath(params.samplesheet)
-        | splitCsv(sep:'\t')
-        | map { row ->
-            (caseID, samplename, sex, outKey) = tuple(row)
-            meta = [
-                caseID   : caseID,
-                id       : samplename,
-                sex      : sex,
-                groupKey : "customSampleSheet",
-                outKey   : caseID,
-                ssBase   : ssBase,
-                rekv     : outKey
-            ]
-            meta
-        }
-        | set { samplesheet_full }
-    }
-
-    if (params.samplesheet && params.jointSS) {
-
-        def ssBase = params.samplesheet
-                    .toString()
-                    .tokenize('/')
-                    .last()
-                    .replaceFirst(/\.txt$/, '')
-
-        Channel
-        .fromPath(params.samplesheet)
-        .splitCsv(sep: '\t')
-        .map { row ->
-            def (rekv, npn, material, testlist, gender, proband, intRef) = row
-            def sex = (gender == 'K') ? 'female' : 'male'
-
-            def meta = [
-                rekv     : rekv,
-                id       : npn,
-                material : material,
-                testlist : testlist,
-                gender   : gender,
-                sex      : sex,
-                proband  : proband,
-                intRef   : intRef,
-                ssBase   : ssBase,
-                outKey   : 'multiSampleAnalysis',
-                groupKey : intRef
-            ]
-
-            tuple(intRef, meta)
-        }
-        .groupTuple()
-        .flatMap { intRef, metas ->
-
-            def probands = metas.findAll { it.proband == 'T' }
-            assert probands && probands.size() >= 1 : "No proband (T) found for intRef=${intRef}"
-
-            def anchor = probands[0]
-            def caseID = "${anchor.rekv}_${anchor.testlist}_${intRef}"
-
-            metas.collect { m ->
-                def relation
-                if (m.proband == 'T') {
-                    relation = 'index'
-                } else if (m.gender == 'M') {
-                    relation = 'pater'
-                } else if (m.gender == 'K') {
-                    relation = 'mater'
-                } else {
-                    relation = 'unknown_relation'
-                }
-
-                m + [
-                    caseID   : caseID,
-                    relation : relation
-                ]
-            }
-        }
-        | set { samplesheet_full }
-    }
-}
-
-
-if (!params.vspipelineOnly && params.aligned) {
+if (params.aligned) {
 
     inputBam="${params.input}/*.bam"
     inputBai="${params.input}/*.bai"
@@ -211,7 +106,7 @@ if (!params.vspipelineOnly && params.aligned) {
 }
 
 
-if (!params.vspipelineOnly && !params.aligned) {
+if (!params.aligned) {
 
     if (params.input) {
         if (params.hifiReads){
@@ -221,7 +116,7 @@ if (!params.vspipelineOnly && !params.aligned) {
             inputBam="${params.input}/**/*.fail_reads.*.bam"
         }
         if (!params.hifiReads && !params.failedReads) {
-            inputBam="${params.dataArchive}/**/*.bam"
+            inputBam="${params.input}/**/*.bam"
         }
     }
     
@@ -237,7 +132,7 @@ if (!params.vspipelineOnly && !params.aligned) {
         }
     }
 
-    if (params.samplesheet && !params.intSS && !params.jointSS) {
+    if (params.samplesheet && !params.customSS && !params.jointSS) {
               
         def ssBase = params.samplesheet
                     .toString()
@@ -250,7 +145,6 @@ if (!params.vspipelineOnly && !params.aligned) {
         |map { row ->
             (rekv, npn,material,testlist,gender,proband,intRef) = row[0].tokenize("_")
             def groupKey    = (intRef == 'noInfo')  ? "single" : intRef
-            def outKey      = (intRef == 'noInfo')  ? "singleSampleAnalysis" : "multiSampleAnalysis"
             def sex         = (gender =="K")        ? "female" : "male"
             meta=[  id          :npn,
                     testlist    :testlist,
@@ -259,23 +153,24 @@ if (!params.vspipelineOnly && !params.aligned) {
                     intRef      :intRef,
                     rekv        :rekv,
                     groupKey    :groupKey,
-                    outKey      :outKey,
                     ssBase      :ssBase]
             meta
             }
-
         | set {samplesheet_full}
         samplesheet_full
         |branch {row ->
-            singleSample: (row.groupKey=~/single/)
+            singleSample: (row.groupKey== "single")
                 return row
             multiSample: true
                 return row
         }
         |set {samplesheetBranch}
     }
+                //def outKey      = (intRef == 'noInfo')  ? "singleSampleAnalysis" : "multiSampleAnalysis"
+
+                    //outKey      :outKey,
     // intermediate naming scheme:
-    if (params.samplesheet && params.intSS) {
+    if (params.samplesheet && params.customSS) {
 
         def ssBase = params.samplesheet
                     .toString()
@@ -293,9 +188,7 @@ if (!params.vspipelineOnly && !params.aligned) {
         | set {samplesheet_full}
     }
 
-    if (params.samplesheet && params.jointSS) {
-            // jointSS (from metadata.txt):
-            //rekv_npn_materia_testlist_sex_proband_intref
+    if (params.samplesheet && (params.jointSS || params.familySS) ) {
         def ssBase = params.samplesheet
                     .toString()
                     .tokenize('/')
@@ -330,7 +223,7 @@ if (!params.vspipelineOnly && !params.aligned) {
 
         def probands = metas.findAll { it.proband == 'T' }
         assert probands && probands.size() >= 1 : "No proband (T) found for intRef=${intRef}"
- 
+
         def anchor = probands[0]
         def caseID = "${anchor.rekv}_${anchor.testlist}_${intRef}"
 
@@ -366,7 +259,7 @@ if (!params.vspipelineOnly && !params.aligned) {
                 (samplename,material,testlist,gender)       =samplenameFull.tokenize("_")
                 //meta=[id:samplename,genderFile:gender,testlistFile:testlist]
                 meta=[id:samplename]
-                tuple(meta,bam)        
+                tuple(meta,bam)   
             }
         |groupTuple(sort:true)
         | map { meta, bams ->
@@ -390,13 +283,18 @@ if (!params.vspipelineOnly && !params.aligned) {
             | map { meta, bam -> tuple(meta.id,meta,bam) }
         |set {ubam_input_samples}    
 
-        if (!params.singleOnly) {
+        if (!params.singleOnly && !params.intrefOnly) {
             samplesheet_full
             |map {row -> meta2=[row.id,row]}
             |set {samplesheet_join}
         }
         if (params.singleOnly) {
             samplesheetBranch.singleSample
+            |map {row -> meta2=[row.id,row]}
+            |set {samplesheet_join}
+        }
+        if (params.intrefOnly) {
+            samplesheetBranch.multiSample
             |map {row -> meta2=[row.id,row]}
             |set {samplesheet_join}
         }
@@ -421,7 +319,7 @@ if (!params.vspipelineOnly && !params.aligned) {
         //Branch by total input size (i.e. drop all samples with combined ubam size < e.g. 30GB)
         ubam_ss_merged
             |branch { meta, bams ->
-                keep:   (meta.totalsizeGB as double) >= params.minGB //30
+                keep:   (meta.totalsizeGB as double) >= params.minGB 
                     return [meta, bams]
                 drop:   true
                     return [meta, bams]
@@ -491,7 +389,6 @@ if (!params.vspipelineOnly && !params.aligned) {
         | set {ubam_input }
         
         ubam_input.samples
-        |view
         |set {finalUbamInput}
     }
 
@@ -500,7 +397,316 @@ if (!params.vspipelineOnly && !params.aligned) {
 
 
 /////////////////// MODULES ///////////////////////
-include {pbmm2_align;
+
+
+ include {
+        write_input_summary;
+        write_dropped_samples_summary;
+        symlinks_ubam_dropped;
+        write_analyzed_samples_summary;
+        hiPhase;
+        } from "./modules/dnaModules.nf" 
+///////////////// SUBWORKFLOWS ///////////////////////
+
+include { PREPROCESS }              from './subworkflows/PREPROCESS.nf'
+include { PRE_PHASING }             from './subworkflows/PRE_PHASING.nf'
+include { POST_PHASING }            from './subworkflows/POST_PHASING.nf'
+include { FAMILY_ANALYSIS }         from './subworkflows/FAMILY_ANALYSIS.nf'
+include { FAMILY_ANALYSIS_ENTRY }   from './subworkflows/FAMILY_ANALYSIS.nf'
+////////////////// WORKFLOWS AND PROCESSES ///////////////////////
+
+
+process MIRROR_OUTPUT_SYMLINKS {
+    tag "mirror_output_symlinks"
+    label "low"
+
+    input:
+    val trigger
+    val source_dirs
+    val link_dir
+    val exclude_dirname
+
+    output:
+    path ".mirror_output_symlinks.done", emit: done
+
+    script:
+    def srcList = source_dirs.collect { it.toString() }.join('\n')
+    """
+    set -euo pipefail
+
+    DST_BASE="${link_dir}"
+    EXCLUDE_DIRNAME="${exclude_dirname}"
+
+    mkdir -p "\$DST_BASE"
+
+    cat > source_dirs.txt <<'EOF_SOURCE_DIRS'
+${srcList}
+EOF_SOURCE_DIRS
+
+    while IFS= read -r SRC_SAMPLE; do
+        [ -z "\$SRC_SAMPLE" ] && continue
+        [ -d "\$SRC_SAMPLE" ] || continue
+
+        sample_name="\$(basename "\$SRC_SAMPLE")"
+        DST_SAMPLE="\$DST_BASE/\$sample_name"
+
+        mkdir -p "\$DST_SAMPLE"
+
+        (
+            cd "\$SRC_SAMPLE"
+
+            while IFS= read -r -d '' dir; do
+                clean_dir="\${dir#./}"
+
+                if [ "\$clean_dir" = "." ]; then
+                    continue
+                fi
+
+                mkdir -p "\$DST_SAMPLE/\$clean_dir"
+            done < <(
+                find . \
+                    -type d -name "\$EXCLUDE_DIRNAME" -prune -o \
+                    -type d -print0
+            )
+        )
+
+        (
+            cd "\$SRC_SAMPLE"
+
+            while IFS= read -r -d '' file; do
+                clean_file="\${file#./}"
+
+                src_file="\$SRC_SAMPLE/\$clean_file"
+                dst_file="\$DST_SAMPLE/\$clean_file"
+
+                mkdir -p "\$(dirname "\$dst_file")"
+
+                if [ -L "\$dst_file" ]; then
+                    existing="\$(readlink "\$dst_file")"
+
+                    if [ "\$existing" = "\$src_file" ]; then
+                        continue
+                    fi
+
+                    rm -f "\$dst_file"
+                fi
+
+                if [ -e "\$dst_file" ]; then
+                    continue
+                fi
+
+                ln -s "\$src_file" "\$dst_file"
+            done < <(
+                find . \
+                    -type d -name "\$EXCLUDE_DIRNAME" -prune -o \
+                    -type f -print0
+            )
+        )
+    done < source_dirs.txt
+
+    touch .mirror_output_symlinks.done
+    """
+}
+
+
+workflow {
+
+    finalUbamInput
+        .map { meta, data -> params.outBase(meta).toString() }
+        .distinct()
+        .collect()
+        | set { symlink_source_dirs_ch }
+
+    if (!params.aligned) {
+        write_input_summary(ubam_size_summary_ch)
+        write_analyzed_samples_summary(ubam_size_keep_ch)
+        write_dropped_samples_summary(ubam_size_dropped_ch)
+        symlinks_ubam_dropped(ubam_ss_merged_size_split.drop)
+        PREPROCESS(finalUbamInput)
+    }
+    PRE_PHASING(PREPROCESS.out.alignedFinal)
+
+    hiPhase(PRE_PHASING.out.hiphaseInput)
+
+    hiPhase.out.hiphase_bam
+        .join(hiPhase.out.hiphase_dv_vcf)
+        .join(hiPhase.out.hiphase_sawfish_vcf)
+        .join(PRE_PHASING.out.sawfish_supporting_reads)
+        | map { meta, bam, bai, dv_vcf, dv_idx, sv_vcf, sv_idx, sv_jsonReads ->
+            tuple(meta, [
+                bam:           bam,
+                bai:           bai,
+                dv_vcf:        dv_vcf,
+                dv_idx:        dv_idx,
+                sawfish_vcf:   sv_vcf,
+                sawfish_idx:   sv_idx,
+                sawfish_reads: sv_jsonReads
+            ])
+        }
+    | set { phasedAll }  // use for val(data) instead of path(data) setup in modules 
+
+    POST_PHASING(
+                phasedAll,
+                PRE_PHASING.out.sawfish_supporting_reads,
+                PRE_PHASING.out.mosdepth,
+                PRE_PHASING.out.nanoStat
+                )
+
+    def hpo_ch = params.hpo        
+        ? channel.fromPath(params.hpo)
+        : Channel.empty()
+
+    def ss_ch  = params.samplesheet 
+        ? channel.fromPath(params.samplesheet) 
+        : Channel.empty()
+
+
+    if (params.jointCall || params.jointSS) {
+
+        PRE_PHASING.out.sawfish_discover_dir   // tuple(meta), path(dir), val(bam)
+        | map { meta, dir, bam ->
+            tuple(
+            meta.caseID, tuple(meta, "${dir.toString()}, ${bam.toString()}")
+            )
+        }
+        | groupTuple()   // -> caseID, [ (meta,line), (meta,line), ... ]
+        | map { caseID, records ->
+
+            def anchorMeta = records[0][0]
+
+            // build manifest file content
+            def content = records.collect { it[1] }.join("\n") + "\n"
+
+            // write the manifest to a file in the work dir
+            def mf = file("${caseID}.sawFishJoinCall.manifest.csv")
+            mf.text = content
+
+            // emit tuple(meta, manifest)
+            tuple(anchorMeta, mf)
+        }
+        | set { sawfish_jointCall_manifest_ch }
+
+        PRE_PHASING.out.dv_gvcf
+        .map { meta, gvcf, tbi ->
+            // store one record per sample: (caseID, meta, gvcfPath)
+            tuple(meta.caseID, tuple(meta, gvcf.toString()))
+        }
+        .groupTuple()
+        .map { caseID, records ->
+            def anchorMeta = records[0][0]
+            def content = records.collect { it[1] }.join('\n') + '\n'
+            def mf = file("${caseID}.manifest")
+            mf.text = content
+            tuple(anchorMeta, mf)
+        }
+        .set { glnexus_manifest_ch }
+
+        FAMILY_ANALYSIS(
+                        glnexus_manifest_ch,
+                        sawfish_jointCall_manifest_ch,
+                        hpo_ch,
+                        ss_ch
+                        )
+
+        FAMILY_ANALYSIS.out.done
+        | set { family_analysis_done_ch }
+    }
+    else {
+        Channel.empty()
+        | set { family_analysis_done_ch }
+    }
+
+    POST_PHASING.out.done
+        .mix(family_analysis_done_ch)
+        .collect()
+        | set { mirror_trigger_ch }
+
+    MIRROR_OUTPUT_SYMLINKS(
+        mirror_trigger_ch,
+        symlink_source_dirs_ch,
+        params.symlink_mirror_dir,
+        params.symlink_exclude_dirname
+    )
+}
+
+/*
+
+        PRE_PHASING.out.sawfish_discover_dir
+        | map {" --sample "+it}
+        |collectFile(name: "sawfish_discover_dir_list.csv", newLine: false)
+        |map {it.text.trim()}
+        |set {sawfish_discover_bam_list_ch}
+
+
+    if (params.test ||params.summary) {
+        finalUbamInput.view()
+        samplesheet_full.view()
+        write_input_summary(ubam_size_summary_ch)
+        write_analyzed_samples_summary(ubam_size_keep_ch)
+        write_dropped_samples_summary(ubam_size_dropped_ch)
+        symlinks_ubam_dropped(ubam_ss_merged_size_split.drop)
+    }
+
+
+
+        if (!params.skipQC) {
+
+            Channel.empty()
+            .mix(QC.out.mosdepth)
+            .mix(QC.out.nanoStat)
+            .mix(whatsHap_stats.out.multiqc)
+            .map { meta, qcfile ->
+                tuple(params.multiqcKey(meta), meta, qcfile)
+            }
+            .groupTuple(by: 0)
+            .map { key, metas, qcfiles ->
+
+                // pick one representative meta for publishDir + naming
+                def meta0 = metas.find { it.relation == 'index' } ?: metas[0]
+
+                tuple(meta0, qcfiles)
+            }
+            .set { multiqc_inputs_ch }
+            multiQC(multiqc_inputs_ch)
+        }
+
+
+
+        hiPhase.out.hiphase_bam
+        .join(svdb_SawFish.out.sawfishAF10)
+        .join(STRUCTURALVARIANTS.out.sawfish_supporting_reads)
+        | map {meta,bam,bai,sv10_vcf,sv10_idx,sv_jsonReads -> 
+        tuple(meta,[bam:bam,bai:bai,sawfish10_vcf:sv10_vcf,sawfish10_idx:sv10_idx,sawfish_reads:sv_jsonReads])}
+        |set {phasedSawfishAF10}   
+
+        svTopo_filtered(phasedSawfishAF10)
+
+
+
+    if (params.hpo && params.samplesheet && (params.jointCall || params.jointSS)) {
+    
+    glNexus_jointCall.out.glnexus_vcf
+    .combine(hpo_ch)
+    .combine(samplesheet_path_ch)
+    |set {genomiser_ch}
+    
+    glNexus_jointCall.out.glnexus_wes_roi_vcf
+    .combine(hpo_ch)
+    .combine(samplesheet_path_ch)
+    |set {exomiser_ch}
+    
+    svdb_sawFish2_jointCall_caseID.out.sawfish_caseID_AF10
+    .combine(hpo_ch)
+    .combine(samplesheet_path_ch)
+    |set {exomiserSV_ch}
+        //above structure: caseID, vcf, idx, hpoFile,samplesheet
+        exo14_2508_exome(exomiser_ch)
+        exo14_2508_genome(genomiser_ch)
+        exo14_2508_SV(exomiserSV_ch)
+    }
+
+
+ include {pbmm2_align;
         create_fofn;
         pbmm2_align_mergedData;
         extractHifi;
@@ -515,12 +721,17 @@ include {pbmm2_align;
         glNexus_jointCall;
         trgt4_diseaseSTRs;
         trgt4_diseaseSTRs_plots;
+        trgt4_diseaseSTRs_plots_meth;
         trgt4_all;
+        trgt5_diseaseSTRs;
+        trgt5_diseaseSTRs_plots;
+        trgt5_diseaseSTRs_plots_meth;
         kivvi_d4z4;
-        methylationBW;
+        pbCPGtools;
         paraphase;
+        paraphase35
         starphase;
-        methylationSegm;
+        methBat;
         multiQC;
         multiQC_ALL;
         mosdepthROI;
@@ -541,434 +752,16 @@ include {pbmm2_align;
         write_dropped_samples_summary;
         symlinks_ubam_dropped;
         write_analyzed_samples_summary;
-        //collect_versions;
         } from "./modules/dnaModules.nf" 
 
-include { VSpipeline } from "./modules/vspipeline.nf"
 
 
-puretargetPlotGenes=["SCA1_ATXN1",
-                     "SCA2_ATXN2",
-                     "SCA3_ATXN3",
-                     "SCA6_CACNA1A",
-                     "SCA7_ATXN7",
-                     "CANVAS_RFC1",
-                     "DM1_DMPK",
-                     "DM2_CNBP",
-                     "FTDALS1_C9orf72",
-                     "FXS_FMR1",
-                     "FRDA_FXN",
-                     "HD_HTT"]
 
 
-////////////////// WORKFLOWS AND PROCESSES ///////////////////////
-
-workflow PREPROCESS {
-
-    take:
-    finalUbamInput     
-   
-    main:
-
-    inputFiles_symlinks_ubam(finalUbamInput)
-    create_fofn(finalUbamInput)
-    pbmm2_align_mergedData(create_fofn.out)
-/*    
-    if (!params.failedReads && !params.allReads && !params.hifiReads) {
-        extractHifi(pbmm2_align_mergedData.out.bamAll)
-    }
 */
-    emit:
-    alignedAll=pbmm2_align_mergedData.out.bamAll
-    //alignedHifi=extractHifi.out.bamHifi
-
-    
-}
 
 
-workflow VARIANTS {
-
-    take:
-    aligned    
-    main:
-    deepvariant(aligned)
-
-    emit:
-    dv_vcf=deepvariant.out.dv_vcf
-    dv_gvcf=deepvariant.out.dv_gvcf
-}
-
-workflow STRUCTURALVARIANTS {
-
-    take:
-    aligned
-
-    main:
-
-    sawFish2(aligned)
-
-    emit:
-    sawfish_vcf=sawFish2.out.sv_vcf
-    sawfish_discover_dir=sawFish2.out.sv_discover_dir
-    sawfish_discover_dir2=sawFish2.out.sv_discover_dir2
-    sawfish_supporting_reads=sawFish2.out.sv_supporting_reads
-}
-
-workflow STR {
-    take:
-    aligned
-
-    main:
-    if (params.genome=="hg38") {
-        trgt4_all(aligned)
-    }
-
-    trgt4_diseaseSTRs(aligned)
-    trgt4_diseaseSTRs.out.trgt_full.combine(puretargetPlotGenes)
-    |map {meta,bam,bai,vcf,tbi,genes -> 
-    tuple(meta,[bam:bam,bai:bai,vcf:vcf,tbi:tbi,strID:genes])}
-    //tuple(meta,bam,genes)}
-    |set {trgt_plot_ch}
-    trgt4_diseaseSTRs_plots(trgt_plot_ch)
-
-    emit:
-    str4_vcf=trgt4_diseaseSTRs.out.str4_vcf
-}
-
-
-workflow QC {
-    take:
-    aligned
-
-    main:
-    mosdepthROI(aligned)
-    nanoStat(aligned)
-
-    emit:
-    mosdepth=mosdepthROI.out.multiqc
-    nanoStat=nanoStat.out.multiqc
-}
-
-workflow {
-    if (params.test ||params.summary) {
-        finalUbamInput.view()
-        samplesheet_full.view()
-        write_input_summary(ubam_size_summary_ch)
-        write_analyzed_samples_summary(ubam_size_keep_ch)
-        write_dropped_samples_summary(ubam_size_dropped_ch)
-        symlinks_ubam_dropped(ubam_ss_merged_size_split.drop)
-    }
-
-    if (params.vspipelineOnly) {
-
-        samplesheet_full
-        | filter { meta ->
-            if (params.singleOnly) {
-                return meta.groupKey == 'single'
-            }
-            return true
-        }
-        | filter { meta ->
-            def normalizedTestlist = (meta.testlist ?: '')
-                .toString()
-                .trim()
-                .replaceAll('-', '_')
-
-            def requestedTestlist = (params.vspipeline_testlist ?: '')
-                .toString()
-                .trim()
-                .replaceAll('-', '_')
-
-            if (requestedTestlist) {
-                return normalizedTestlist == requestedTestlist
-            }
-
-            def configuredVspipelineTestlists = (params.vspipeline_configs ?: [
-                SL_NGC_HJERTESYGDOM : [:],
-                SL_NGC_UNGE_VOKSNE  : [:],
-                SL_NGC_ARVELIG_KRFT : [:],
-                SL_NGC_NEUROGENETIK : [:],
-                SL_LWG_GENOM        : [:],
-                SL_NGC_SJAELDNE     : [:],
-                SL_NGC_NYRESVIGT    : [:],
-                SL_NGC_ENDOKRINOLOG : [:],
-                SL_NGC_OFTALMOLOGI  : [:],
-                SL_NGC_HUDSYGDOM    : [:],
-                SL_LWG_CNV          : [:]
-            ]).keySet()
-
-            return configuredVspipelineTestlists.contains(normalizedTestlist)
-        }
-        | map { meta ->
-            def sampleBase = "${meta.id}.${genome_version}.${readSubset_hifiDefault}"
-            def outBase = params.outBase(meta).toString()
-
-            def data = [
-                bam             : "${outBase}/alignments/HifiReads/${sampleBase}.hiphase.bam",
-                bai             : "${outBase}/alignments/HifiReads/${sampleBase}.hiphase.bam.bai",
-                dv_vcf          : "${outBase}/SNV_and_INDELs/${sampleBase}.hiphase.deepvariant.vcf.gz",
-                dv_idx          : "${outBase}/SNV_and_INDELs/${sampleBase}.hiphase.deepvariant.vcf.gz.tbi",
-                sawfish10_vcf   : "${outBase}/structuralVariants/vcfs/${sampleBase}.sawfishSV.hiphase.svdb.AF_below10pct.vcf.gz",
-                sawfish10_idx   : "${outBase}/structuralVariants/vcfs/${sampleBase}.sawfishSV.hiphase.svdb.AF_below10pct.vcf.gz.tbi"
-            ]
-
-            tuple(meta, data)
-        }
-        | set { vspipeline_input_ch }
-
-        VSpipeline(vspipeline_input_ch)
-    }
-
-    if (!params.vspipelineOnly && !params.test && !params.summary) {
-        if (!params.aligned) {
-            write_input_summary(ubam_size_summary_ch)
-            write_analyzed_samples_summary(ubam_size_keep_ch)
-            write_dropped_samples_summary(ubam_size_dropped_ch)
-            symlinks_ubam_dropped(ubam_ss_merged_size_split.drop)
-            PREPROCESS(finalUbamInput)
-
-            if (!params.failedReads && !params.allReads && !params.hifiReads) {
-                extractHifi(PREPROCESS.out.alignedAll)
-                extractHifi.out.alignedHifi.join(PREPROCESS.out.alignedAll)
-                | map {meta,bamHifi,baiHifi,bamAll,baiAll ->
-                tuple(meta, [mainBamFile:bamHifi, mainBaiFile:baiHifi, bamAll:bamAll, baiAll:baiAll])}
-                |set {alignedFinal}
-            }
-            if (params.allReads || params.hifiReads || params.failedReads) {
-                PREPROCESS.out.alignedAll
-                | map {meta,bamAll,baiAll ->
-                tuple(meta,[mainBamFile:bamAll,mainBaiFile:baiAll])}
-                |set {alignedFinal}
-            }
-        }
-
-        if (!params.skipQC) {
-            QC(alignedFinal)
-        }
-        
-        if (!params.skipVariants) {
-            VARIANTS(alignedFinal)
-            VARIANTS.out.dv_vcf     //meta, vcf, idx
-            | map {meta,vcf,idx -> tuple(meta,[vcf,idx])}
-            |set {dv_vcf}
-            VARIANTS.out.dv_gvcf
-            | map {meta,vcf,idx -> tuple(meta,[vcf,idx])}
-            |set {dv_gvcf}
-        }
-
-        if (!params.skipSV) {
-            STRUCTURALVARIANTS(alignedFinal)
-            STRUCTURALVARIANTS.out.sawfish_vcf //meta, vcf, idx
-            | map {meta,vcf,idx -> tuple(meta,[vcf,idx])}
-            |set {sawfish_ch}
-        }
-
-        if (!params.skipSTR) {
-            STR(alignedFinal)
-        }
-
-        if (!params.skipVariants && !params.skipSV && !params.skipSTR) {
-
-            STR.out.str4_vcf
-            | map {meta,vcf,idx -> tuple(meta,[vcf,idx])}
-            | set {strchannel}
-
-            alignedFinal.join(dv_vcf).join(sawfish_ch).join(strchannel)
-            |set {hiphaseInput}
-
-            hiPhase(hiphaseInput)
-            
-            hiPhase.out.hiphase_bam
-            .join(hiPhase.out.hiphase_dv_vcf)
-            .join(hiPhase.out.hiphase_sawfish_vcf)
-            .join(STRUCTURALVARIANTS.out.sawfish_supporting_reads)
-            | map {meta,bam,bai,dv_vcf,dv_idx,sv_vcf,sv_idx,sv_jsonReads -> 
-            tuple(meta,[bam:bam,bai:bai,dv_vcf:dv_vcf,dv_idx:dv_idx,sawfish_vcf:sv_vcf,sawfish_idx:sv_idx,sawfish_reads:sv_jsonReads])}
-            |set {phasedAll}    // use for val(data) instead of path(data) setup in modules 
-
-            if (params.jointCall || params.jointSS) {
-                STRUCTURALVARIANTS.out.sawfish_discover_dir
-                | map {" --sample "+it}
-                |collectFile(name: "sawfish_discover_dir_list.csv", newLine: false)
-                |map {it.text.trim()}
-                |set {sawfish_discover_bam_list_ch}
-    
-                STRUCTURALVARIANTS.out.sawfish_discover_dir2   // tuple(meta), path(dir), val(bam)
-                | map { meta, dir, bam ->
-                    // Emit key + a record line we’ll write into the manifest
-                    tuple(
-                    meta.caseID, tuple(meta, "${dir.toString()}, ${bam.toString()}")
-                    )
-                }
-                | groupTuple()   // -> caseID, [ (meta,line), (meta,line), ... ]
-                | map { caseID, records ->
-
-                    def anchorMeta = records[0][0]
-
-                    // build manifest file content
-                    def content = records.collect { it[1] }.join("\n") + "\n"
-
-                    // write the manifest to a file in the work dir
-                    def mf = file("${caseID}.sawFishJoinCall.manifest.csv")
-                    mf.text = content
-
-                    // emit tuple(meta, manifest)
-                    tuple(anchorMeta, mf)
-                }
-                | set { sawfish_jointCall_manifest_ch }
-
-
-                /*
-                    STRUCTURALVARIANTS.out.sawfish_discover_dir2 //meta, sawfishDir,bam,bai
-                    | map {meta, dir, bam ->
-                        def dirPath = dir.toString()
-                        def bamPath = bam.toString()
-                        return [ meta.caseID, dirPath+", "+ bamPath ]
-                    }
-                    | collectFile(newLine: true) { item  ->
-                        def caseID = item[0]
-                        def line = item[1]
-                        return [ "${caseID}.sawFishJoinCall.manifest.csv", line ]
-                    }
-                    | map { manifestFile -> 
-                        def caseID = manifestFile.getName().tokenize(".")[0]
-                        return tuple(caseID, [manifestFile])
-                        }
-                    | set { sawfish_jointCall_manifest_ch }
-                */
-                VARIANTS.out.dv_gvcf
-                //glnexus_manifest_ch = dv_gvcf
-                .map { meta, gvcf, tbi ->
-                    // store one record per sample: (caseID, meta, gvcfPath)
-                    tuple(meta.caseID, tuple(meta, gvcf.toString()))
-                }
-                .groupTuple()
-                .map { caseID, records ->
-                    def anchorMeta = records[0][0]
-                    def content = records.collect { it[1] }.join('\n') + '\n'
-                    def mf = file("${caseID}.manifest")
-                    mf.text = content
-                    tuple(anchorMeta, mf)
-                }
-                .set { glnexus_manifest_ch }
-
-                glNexus_jointCall(glnexus_manifest_ch)
-                sawFish2_jointCall_caseID(sawfish_jointCall_manifest_ch)
-                svdb_sawFish2_jointCall_caseID(sawFish2_jointCall_caseID.out.sv_jointCall_caseID_vcf)
-            }
-
-            methylationBW(phasedAll)
-            methylationSegm(methylationBW.out)
-            cramino(phasedAll)
-            mitorsaw(phasedAll)
-            whatsHap_stats(phasedAll)
-            
-            if (params.genome=="hg38") {
-                paraphase(phasedAll)
-                kivvi_d4z4(phasedAll)
-                kivvi05_d4z4(phasedAll)
-                starphase(phasedAll)
-                svTopo(phasedAll)
-                svdb_SawFish(phasedAll)
-
-                /*
-                 * VarSeq import is controlled by params.vspipeline_configs in
-                 * modules/vspipeline.nf or an included config. By default, any
-                 * sample whose normalized testlist exists in that map is sent to
-                 * VSpipeline. Optional --vspipeline_testlist can still be used as
-                 * a single-testlist debug/override filter.
-                 */
-                phasedAll
-                .join(svdb_SawFish.out.sawfishAF10)
-                | map { meta, data, sv10_vcf, sv10_idx ->
-                    tuple(meta, data + [sawfish10_vcf: sv10_vcf, sawfish10_idx: sv10_idx])
-                }
-                | filter { meta, data ->
-                    def normalizedTestlist = (meta.testlist ?: '')
-                        .toString()
-                        .trim()
-                        .replaceAll('-', '_')
-
-                    def requestedTestlist = (params.vspipeline_testlist ?: '')
-                        .toString()
-                        .trim()
-                        .replaceAll('-', '_')
-
-                    if (requestedTestlist) {
-                        return normalizedTestlist == requestedTestlist
-                    }
-
-                    def configuredVspipelineTestlists = (params.vspipeline_configs ?: [
-                        SL_NGC_HJERTESYGDOM : [:],
-                        SL_NGC_UNGE_VOKSNE  : [:],
-                        SL_NGC_ARVELIG_KRFT : [:],
-                        SL_NGC_NEUROGENETIK : [:],
-                        SL_LWG_GENOM        : [:],
-                        SL_NGC_SJAELDNE     : [:],
-                        SL_NGC_NYRESVIGT    : [:],
-                        SL_NGC_ENDOKRINOLOG : [:],
-                        SL_NGC_OFTALMOLOGI  : [:],
-                        SL_NGC_HUDSYGDOM    : [:],
-                        SL_LWG_CNV          : [:]
-                    ]).keySet()
-
-                    return configuredVspipelineTestlists.contains(normalizedTestlist)
-                }
-                | set { vspipeline_input_ch }
-
-                VSpipeline(vspipeline_input_ch)
-            }
-
-            hiPhase.out.hiphase_bam
-            .join(svdb_SawFish.out.sawfishAF10)
-            .join(STRUCTURALVARIANTS.out.sawfish_supporting_reads)
-            | map {meta,bam,bai,sv10_vcf,sv10_idx,sv_jsonReads -> 
-            tuple(meta,[bam:bam,bai:bai,sawfish10_vcf:sv10_vcf,sawfish10_idx:sv10_idx,sawfish_reads:sv_jsonReads])}
-            |set {phasedSawfishAF10}   
-
-            svTopo_filtered(phasedSawfishAF10)
-
-            // trio specific analysis. 
-            //NB: Currently only works for single-family or single-trio analysis!
-
-            if (params.hpo && params.samplesheet && (params.jointCall || params.jointSS)) {
-            glNexus_jointCall.out.glnexus_vcf.combine(hpo_ch).combine(samplesheet_path_ch)
-            |set {genomiser_ch}
-            glNexus_jointCall.out.glnexus_wes_roi_vcf.combine(hpo_ch).combine(samplesheet_path_ch)
-            |set {exomiser_ch}
-            svdb_sawFish2_jointCall_caseID.out.sawfish_caseID_AF10.combine(hpo_ch).combine(samplesheet_path_ch)
-            |set {exomiserSV_ch}
-                //above structure: caseID, vcf, idx, hpoFile,samplesheet
-                exo14_2508_exome(exomiser_ch)
-                exo14_2508_genome(genomiser_ch)
-                exo14_2508_SV(exomiserSV_ch)
-            }
-
-            if (!params.skipQC) {
-
-                Channel.empty()
-                .mix(QC.out.mosdepth)
-                .mix(QC.out.nanoStat)
-                .mix(whatsHap_stats.out.multiqc)
-                .map { meta, qcfile ->
-                    tuple(params.multiqcKey(meta), meta, qcfile)
-                }
-                .groupTuple(by: 0)
-                .map { key, metas, qcfiles ->
-
-                    // pick one representative meta for publishDir + naming
-                    // (in family mode you may prefer proband/index)
-                    def meta0 = metas.find { it.relation == 'index' } ?: metas[0]
-
-                    tuple(meta0, qcfiles)
-                }
-                .set { multiqc_inputs_ch }
-                multiQC(multiqc_inputs_ch)
-            }
-        }
-    }
-}
-
+// Virker ikke lige pt.:
 workflow.onComplete {
 
     if( !params.createSymlinks ) {
@@ -1013,209 +806,4 @@ workflow.onComplete {
         }
     }
 }
-
-
-
-
-                /*
-                Removed 260128 - groupedOutput currently obsolete
-                    manifestChannel =dv_gvcf
-                    | map { meta, files ->
-                        def vcfPath = files[0].toString()
-                        return [ meta.caseID, "${vcfPath}" ]
-                    }
-                    | collectFile(newLine: true) { item ->
-                        def caseID = item[0]
-                        def line   = item[1]
-                        return [ "${caseID}.manifest", line ]
-                    }
-                    
-                    manifestChannel
-                    | map { manifestFile -> manifestFile
-                        def caseID = manifestFile.getName().tokenize(".")[0]
-                        return tuple(caseID, [manifestFile])
-                    }
-                    | set { glnexus_manifest_ch }
-               
-                if (!params.groupedOutput) {           
-                    sawFish2_jointCall_all(sawfish_discover_bam_list_ch)   
-                    svdb_sawFish2_jointCall_all(sawFish2_jointCall_all.out.sv_jointCall_vcf)
-                }
-
-                
-
-
-                QC.out.mosdepth.join(QC.out.nanoStat).join(whatsHap_stats.out.multiqc)
-                | map {meta,mosdepth,nanoStat,whatshap -> tuple(meta,[mosdepth,nanoStat,whatshap])}
-                |set {multiqcSingleInput}   
-                multiQC(multiqcSingleInput)
-
-                    def allOutputs = Channel.empty()
-                allOutputs = allOutputs.mix(QC.out.mosdepth)    
-                allOutputs = allOutputs.mix(QC.out.nanoStat)          
-                allOutputs = allOutputs.mix(whatsHap_stats.out.multiqc)    
-
-                allOutputs
-                |groupTuple
-                |view
-                |set {multiqcAllInput}
-                if (params.groupedOutput) {
-                    multiQC_ALL(multiqcAllInput)
-
-
-
-
-
-/*
-
-251223 working - backup:
-
-
-
-
-
-
-    if (params.samplesheet && !params.oldSS && !params.intSS) {
-
-        // new samplesheet - directly from metadata extracted from LabWare:
-        channel.fromPath(params.samplesheet)
-        | splitCsv(sep:'\t')
-        |map { row ->
-             (rekv, npn,material,testlist,gender,proband,intRef) = row[0].tokenize("_")
-            meta=[id:npn,caseID:testlist, sex:gender, proband:proband,intRef:intRef, rekv:rekv]
-            meta
-            }
-        | set {samplesheet_full}
-
-
-        Channel.fromPath(inputBam, followLinks: true)
-        |map { tuple(it.baseName,it) }
-        |map {id,bam -> 
-                (samplenameFull,pacbioID,readset,barcode)   =id.tokenize(".")
-                (instrument,date,time)                      =pacbioID.tokenize("_")     
-                (samplename,material,testlist,gender)       =samplenameFull.tokenize("_")
-               // meta=[id:samplename,genderFile:gender,testlistFile:testlist]
-               meta=[id:samplename]
-                tuple(meta,bam)        
-            }
-        |groupTuple(sort:true)
-        |branch  {meta,bam -> 
-            UNASSIGNED: (meta.id=~/UNASSIGNED/)
-                        return [meta,bam]
-            samples: true
-                        return [meta,bam]
-        }
-        | set {ubam_input }
-    }
-
-
-
- 260105 - working backup def. input ch:
-
-
-    if (params.samplesheet && !params.intSS) {
-        
-        
-        def ssBase = params.samplesheet
-                    .toString()
-                    .tokenize('/')
-                    .last()
-                    .replaceFirst(/_metadata$/, '')
-
-
-        channel.fromPath(params.samplesheet)
-        | splitCsv(sep:'\t')
-        |map { row ->
-            (rekv, npn,material,testlist,gender,proband,intRef) = row[0].tokenize("_")
-            def groupKey = (intRef == 'noInfo') ? "singleSample" : intRef
-            meta=[id:npn,caseID:testlist, sex:gender, proband:proband,intRef:intRef, rekv:rekv,groupKey:groupKey,ssBase:ssBase]
-            meta
-            }
-        | set {samplesheet_full}
-
-        Channel.fromPath(inputBam, followLinks: true)
-        | map { tuple(it.baseName, it) }
-            |map {id,bam -> 
-            (samplenameFull,pacbioID,readset,barcode)   =id.tokenize(".")
-            (instrument,date,time)                      =pacbioID.tokenize("_")     
-            (samplename,material,testlist,gender)       =samplenameFull.tokenize("_")
-            // meta=[id:samplename,genderFile:gender,testlistFile:testlist]
-            meta=[id:samplename]
-            tuple(meta,bam)        
-            }
-        | groupTuple(sort:true)   // now emits: (meta, [bam1,bam2,...])
-        | map { meta, bams ->
-            long totalBytes = (bams.sum { it.size() } as long)
-            double totalGB  = totalBytes / (1024.0 * 1024 * 1024)
-            def meta2 = meta + [
-                nBams       : bams.size(),
-                totalsizeGB : totalGB
-            ]
-            tuple(meta2, bams)
-        }
-        | branch { meta, bams ->
-            UNASSIGNED: (meta.id=~/UNASSIGNED/)
-                        return [meta, bams]
-            samples: true
-                        return [meta, bams]
-        }
-        |set { ubam_input_all }
-
-        ubam_input_all.samples
-            | map { meta, bam -> tuple(meta.id,meta,bam) }
-        |set {ubam_input_all_samples}    
-
-        samplesheet_full
-            |map {row -> meta2=[row.id,row]}
-        |set {samplesheet_join}
-
-        samplesheet_join.join(ubam_input_all_samples)
-            |map {samplename, metaSS, metaData, bam -> tuple(metaSS+metaData,bam)}
-        |set {ubam_ss_merged} // full unfiltered set
-
-        //write info of full set to summary file:
- 
-       ubam_ss_merged
-        .map { meta, bams ->
-            def gb = String.format(Locale.US, "%.2f", (meta.totalsizeGB as double))
-            "${meta.id}\t${meta.nBams}\t${readSet}\t${gb}\t${meta.caseID}"
-        }
-        .collect()
-        | map { lines ->
-            def header  ="sample\tbamcount\treadSet\ttotal_gb\ttestlist"
-            ([header] + lines).join("\n")
-        }
-        |set {ubam_size_summary_ch}
-
-        //Branch by total input size (i.e. drop all samples with combined ubam size < e.g. 30GB)
-        ubam_ss_merged
-            |branch { meta, bams ->
-                keep:   (meta.totalsizeGB as double) >= params.minGB //30
-                    return [meta, bams]
-                drop:   true
-                    return [meta, bams]
-            }
-        |set { ubam_ss_merged_size_split }
-
-        //write out dropped samples info
-        ubam_ss_merged_size_split.drop
-        .map { meta, bams ->
-            def gb = String.format(Locale.US, "%.2f", (meta.totalsizeGB as double))
-            "${meta.id}\t${meta.nBams}\t${readSet}\t${gb}\t${meta.caseID}"
-        }
-        .collect()
-        | map { lines ->
-            def header  ="sample\tbamcount\treadSet\ttotal_gb\ttestlist"
-            ([header] + lines).join("\n")
-        }
-        |set {ubam_size_dropped_ch}
-
-        ubam_ss_merged_size_split.keep      // All data passing size limit - ready for downstream
-            |set {finalUbamInput}
-           
-    }
-
-
-
-*/
 
