@@ -83,52 +83,58 @@ Note: GENDER should be either male/female, RELATION should be either mater/index
 ## Options and parameters:
     --help                  Show this help menu with available options
     
-    --samplesheet   [path]: Path to samplesheet to use. Required
+    --samplesheet       [path]: Path to samplesheet to use. Required
     
-    --jointSS       [bool]: Use jointGenotyping, and group output for all samples (use for trio and family analysis)
+    --jointSS           [bool]: Use jointGenotyping, and group output for all samples (use for trio and family analysis)
                                 Default: Not set
     
-    --intSS         [bool]: Use custom samplesheet format (tab separated, 3 mandatory columns)
+    --intSS             [bool]: Use custom samplesheet format (tab separated, 3 mandatory columns)
                                 Default: Not set
 
-    --input         [path]: Path to data to use as input. 
+    --input             [path]: Path to data to use as input. 
                                 Default: Not set. Instead, Search KG Vejle archive for input unmapped bams (search across all previous PacBio runs)
     
-    --allReads      [bool]: Use allreads, i.e. HiFi reads and failed reads as input.
+    --allReads          [bool]: Use allreads, i.e. HiFi reads and failed reads as input.
                                 Default: Uses a combination of AllReads (for STR analysis) and HiFi reads for everything else
     
-    --hifiReads     [bool]: Use HiFi reads only, for all analysis.
+    --hifiReads         [bool]: Use HiFi reads only, for all analysis.
                                 Default: Uses a combination of AllReads (for STR analysis) and HiFi reads for everything else
 
-    --singleOnly    [bool]: Only analyze single genomes in samplesheet (i.e. "noInfo" in int ref)
+    --singleOnly        [bool]: Only analyze single genomes in samplesheet (i.e. "noInfo" in int ref)
                                 Default: Not set - analyze all samples in samplesheet
 
-    --skipQC        [bool]: Do not run QC module
+    --skipQC            [bool]: Do not run QC module
                                 Default: Not set
 
-    --skipVariants  [bool]: Do not call small variants (i.e. skip DeepVariant)
+    --skipVariants      [bool]: Do not call small variants (i.e. skip DeepVariant)
                                 Default: Not set
 
-    --skipSV        [bool]: Do not call structural variants (i.e. skip Sawfish)
+    --skipSV            [bool]: Do not call structural variants (i.e. skip Sawfish)
                                 Default: Not set
 
-    --skipSTR       [bool]: Do not call repeat expansions (i.e. skip TRGT and Kivvi)
+    --skipSTR           [bool]: Do not call repeat expansions (i.e. skip TRGT and Kivvi)
                                 Default: Not set
 
-    --jointCall     [bool]: Perform joint genotyping of samples based on value in first column of samplesheet
+    --jointCall         [bool]: Perform joint genotyping of samples based on value in first column of samplesheet
                                 Default: Not set
 
-    --hpo           [path]: Path to file with hpo terms (only relevant for trios / family analyses)
+    --hpo               [path]: Path to file with hpo terms (only relevant for trios / family analyses)
                                 Default: Not set
 
-    --minGB         [int]:  Minimum size (in gigabytes) of all input unmapped bam files pr. sample.
+    --minGB             [int]:  Minimum size (in gigabytes) of all input unmapped bam files pr. sample.
                                 Default: 36 GB for allreads (HiFi + failed), 30GB for HiFi reads
+
+    --vspipelineOnly    [bool]: only make VarSeq projects. searches the samplesheet and finds folder containing sample/samples and the executes vsPipeline to make varseq projects.
+                                Default: Not Set
 
     ### Slurm Execution parameters:
     -profile slurm:         Run pipeline using KGVejle SLURM cluster
                                 Default: Run pipeline on local server (where script is started)
     --slurmA        [bool]: Use secondary fast tmp storage (nfs_fast_a)
-                                Default: Use primary fast tmp storage location at KGVejle                                        
+                                Default: Use primary fast tmp storage location at KGVejle                
+
+
+    
 
 
 
