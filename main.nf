@@ -6,10 +6,10 @@ date2=new Date().format( 'yyMMdd HH:mm:ss' )
 user="$USER"
 runID="${date}.${user}"
 
-params.test = params.test ?: false
-params.symlink_mirror_dir = params.symlink_mirror_dir ?: "/lnx01_data2/shared/testdata/storage_symlinks"
-params.symlink_per_sample_root = params.symlink_per_sample_root ?: "/lnx01_data3/pacBioAnalyzedSamples/hg38/2026/perSampleAnalysis"
-params.symlink_publish_wait_seconds = params.symlink_publish_wait_seconds ?: 120
+if (!params.containsKey('test')) params.test = false
+if (!params.containsKey('symlink_mirror_dir')) params.symlink_mirror_dir = "/lnx01_data2/shared/testdata/storage_symlinks"
+if (!params.containsKey('symlink_per_sample_root')) params.symlink_per_sample_root = "${outputDirBase}/perSampleAnalysis"
+if (!params.containsKey('symlink_publish_wait_seconds')) params.symlink_publish_wait_seconds = 120
 
 log.info """\
 ======================================================
@@ -571,13 +571,19 @@ workflow {
                 PRE_PHASING.out.nanoStat
                 )
 
-    def hpo_ch = params.hpo        
-        ? channel.fromPath(params.hpo)
-        : Channel.empty()
+    if (params.hpo) {
+        channel.fromPath(params.hpo) | set { hpo_ch }
+    }
+    else {
+        channel.empty() | set { hpo_ch }
+    }
 
-    def ss_ch  = params.samplesheet 
-        ? channel.fromPath(params.samplesheet) 
-        : Channel.empty()
+    if (params.samplesheet) {
+        channel.fromPath(params.samplesheet) | set { ss_ch }
+    }
+    else {
+        channel.empty() | set { ss_ch }
+    }
 
 
     if (params.jointCall || params.jointSS) {
@@ -634,14 +640,14 @@ workflow {
         | set { family_analysis_mirror_items_ch }
     }
     else {
-        Channel.empty()
+        channel.empty()
         | set { family_analysis_done_ch }
 
-        Channel.empty()
+        channel.empty()
         | set { family_analysis_mirror_items_ch }
     }
 
-    mirror_items_ch = Channel.empty()
+    mirror_items_ch = channel.empty()
     mirror_items_ch = mirror_items_ch.mix(PREPROCESS.out.mirror_items)
     mirror_items_ch = mirror_items_ch.mix(PRE_PHASING.out.mirror_items)
     mirror_items_ch = mirror_items_ch.mix(hiPhase.out.hiphase_bam.map { meta, bam, bai -> tuple(meta, 'alignments/HifiReads', [bam, bai]) })
@@ -681,7 +687,7 @@ workflow {
 
         if (!params.skipQC) {
 
-            Channel.empty()
+            channel.empty()
             .mix(QC.out.mosdepth)
             .mix(QC.out.nanoStat)
             .mix(whatsHap_stats.out.multiqc)
