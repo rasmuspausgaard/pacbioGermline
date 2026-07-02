@@ -6,6 +6,8 @@ date2=new Date().format( 'yyMMdd HH:mm:ss' )
 user="$USER"
 runID="${date}.${user}"
 
+params.test = params.test ?: false
+
 params.symlink_mirror_dir = params.symlink_mirror_dir ?: "/lnx01_data2/shared/testdata/storage_symlinks"
 params.symlink_exclude_dirname = params.symlink_exclude_dirname ?: "perSampleStaging"
 
@@ -518,10 +520,13 @@ workflow {
         | set { symlink_source_dirs_ch }
 
     if (!params.aligned) {
-        write_input_summary(ubam_size_summary_ch)
-        write_analyzed_samples_summary(ubam_size_keep_ch)
-        write_dropped_samples_summary(ubam_size_dropped_ch)
-        symlinks_ubam_dropped(ubam_ss_merged_size_split.drop)
+        if (!params.test) {
+            write_input_summary(ubam_size_summary_ch)
+            write_analyzed_samples_summary(ubam_size_keep_ch)
+            write_dropped_samples_summary(ubam_size_dropped_ch)
+            symlinks_ubam_dropped(ubam_ss_merged_size_split.drop)
+        }
+
         PREPROCESS(finalUbamInput)
     }
     PRE_PHASING(PREPROCESS.out.alignedFinal)
@@ -621,12 +626,14 @@ workflow {
         .collect()
         | set { mirror_trigger_ch }
 
-    MIRROR_OUTPUT_SYMLINKS(
-        mirror_trigger_ch,
-        symlink_source_dirs_ch,
-        params.symlink_mirror_dir,
-        params.symlink_exclude_dirname
-    )
+    if (!params.test) {
+        MIRROR_OUTPUT_SYMLINKS(
+            mirror_trigger_ch,
+            symlink_source_dirs_ch,
+            params.symlink_mirror_dir,
+            params.symlink_exclude_dirname
+        )
+    }
 }
 
 /*
