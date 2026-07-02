@@ -19,6 +19,10 @@ workflow PREPROCESS {
     create_fofn(finalUbamInput)
     pbmm2_align_mergedData(create_fofn.out)
 
+    mirror_items_ch = Channel.empty()
+    mirror_items_ch = mirror_items_ch.mix(inputFiles_symlinks_ubam.out.map { meta, data -> tuple(meta, 'documents/inputSymlinks', data) })
+    mirror_items_ch = mirror_items_ch.mix(create_fofn.out.map { meta, fofn -> tuple(meta, 'documents', fofn) })
+
     if (!params.failedReads && !params.allReads && !params.hifiReads) {
         extractHifi(pbmm2_align_mergedData.out.bamAll)
         extractHifi.out.alignedHifi
@@ -35,6 +39,7 @@ workflow PREPROCESS {
     }
 
     emit:
-    alignedFinal=alignedFinal_ch
+    alignedFinal = alignedFinal_ch
+    mirror_items = mirror_items_ch
 
 }
