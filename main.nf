@@ -7,9 +7,9 @@ user="$USER"
 runID="${date}.${user}"
 
 params.test = params.test ?: false
-
 params.symlink_mirror_dir = params.symlink_mirror_dir ?: "/lnx01_data2/shared/testdata/storage_symlinks"
-params.symlink_exclude_dirname = params.symlink_exclude_dirname ?: "perSampleStaging"
+params.symlink_per_sample_root = params.symlink_per_sample_root ?: "/lnx01_data3/pacBioAnalyzedSamples/hg38/2026/perSampleAnalysis"
+params.symlink_publish_wait_seconds = params.symlink_publish_wait_seconds ?: 120
 
 log.info """\
 ======================================================
@@ -418,106 +418,121 @@ include { FAMILY_ANALYSIS_ENTRY }   from './subworkflows/FAMILY_ANALYSIS.nf'
 ////////////////// WORKFLOWS AND PROCESSES ///////////////////////
 
 
-process MIRROR_OUTPUT_SYMLINKS {
-    tag "mirror_output_symlinks"
+
+process MIRROR_PUBLISHED_FILES {
+    tag { "${meta.id}:${rel_dir}" }
     label "low"
 
     input:
-    val trigger
-    val source_dirs
-    val link_dir
-    val exclude_dirname
+    tuple val(meta), val(rel_dir), path(files)
+    val mirror_root
+    val per_sample_root
+    val wait_seconds
 
     output:
-    path ".mirror_output_symlinks.done", emit: done
+    path ".mirror_published_files.done", emit: done
+
+    when:
+    !params.test
 
     script:
-    def srcList = source_dirs.collect { it.toString() }.join('\n')
+    def sourceBase = params.outBase(meta).toString()
     """
     set -euo pipefail
 
-    DST_BASE="${link_dir}"
-    EXCLUDE_DIRNAME="${exclude_dirname}"
+    SOURCE_BASE="${sourceBase}"
+    REL_DIR="${rel_dir}"
+    MIRROR_ROOT="${mirror_root}"
+    PER_SAMPLE_ROOT="${per_sample_root}"
+    PER_SAMPLE_ROOT="\${PER_SAMPLE_ROOT%/}"
+    WAIT_SECONDS="${wait_seconds}"
 
-    mkdir -p "\$DST_BASE"
+    case "\$SOURCE_BASE" in
+        "\$PER_SAMPLE_ROOT"/singleSamples/*|"\$PER_SAMPLE_ROOT"/intRefSamples/*) ;;
+        *)
+            touch .mirror_published_files.done
+            exit 0
+            ;;
+    esac
 
-    cat > source_dirs.txt <<'EOF_SOURCE_DIRS'
-${srcList}
-EOF_SOURCE_DIRS
+    SOURCE_PUBLISH_DIR="\$SOURCE_BASE/\$REL_DIR"
+    REL_SAMPLE="\${SOURCE_BASE#\$PER_SAMPLE_ROOT/}"
+    DEST_DIR="\$MIRROR_ROOT/\$REL_SAMPLE/\$REL_DIR"
 
-    while IFS= read -r SRC_SAMPLE; do
-        [ -z "\$SRC_SAMPLE" ] && continue
-        [ -d "\$SRC_SAMPLE" ] || continue
+    mkdir -p "\$DEST_DIR"
 
-        sample_name="\$(basename "\$SRC_SAMPLE")"
-        DST_SAMPLE="\$DST_BASE/\$sample_name"
+    link_one_file() {
+        local src="\$1"
+        local dst="\$2"
 
-        mkdir -p "\$DST_SAMPLE"
+        mkdir -p "\$(dirname "\$dst")"
 
-        (
-            cd "\$SRC_SAMPLE"
+        if [ -L "\$dst" ]; then
+            local existing
+            existing="\$(readlink "\$dst")"
+            if [ "\$existing" = "\$src" ]; then
+                return 0
+            fi
+            rm -f "\$dst"
+        fi
 
-            while IFS= read -r -d '' dir; do
-                clean_dir="\${dir#./}"
+        if [ -e "\$dst" ]; then
+            return 0
+        fi
 
-                if [ "\$clean_dir" = "." ]; then
-                    continue
-                fi
+        ln -s "\$src" "\$dst"
+    }
 
-                mkdir -p "\$DST_SAMPLE/\$clean_dir"
-            done < <(
-                find . \
-                    -type d -name "\$EXCLUDE_DIRNAME" -prune -o \
-                    -type d -print0
+    mirror_source_path() {
+        local published_path="\$1"
+        local dest_path="\$2"
+
+        if [ -d "\$published_path" ]; then
+            (
+                cd "\$published_path"
+                find . -type d -print0 |
+                while IFS= read -r -d '' d; do
+                    clean_d="\${d#./}"
+                    [ "\$clean_d" = "." ] && continue
+                    mkdir -p "\$dest_path/\$clean_d"
+                done
+
+                find . -type f -print0 |
+                while IFS= read -r -d '' f; do
+                    clean_f="\${f#./}"
+                    link_one_file "\$published_path/\$clean_f" "\$dest_path/\$clean_f"
+                done
             )
-        )
+        elif [ -f "\$published_path" ]; then
+            link_one_file "\$published_path" "\$dest_path"
+        fi
+    }
 
-        (
-            cd "\$SRC_SAMPLE"
+    for staged in ${files}; do
+        base="\$(basename "\$staged")"
+        published="\$SOURCE_PUBLISH_DIR/\$base"
 
-            while IFS= read -r -d '' file; do
-                clean_file="\${file#./}"
+        waited=0
+        while [ ! -e "\$published" ] && [ "\$waited" -lt "\$WAIT_SECONDS" ]; do
+            sleep 1
+            waited=\$((waited + 1))
+        done
 
-                src_file="\$SRC_SAMPLE/\$clean_file"
-                dst_file="\$DST_SAMPLE/\$clean_file"
+        if [ ! -e "\$published" ]; then
+            # Nogle process-output indeholder filer, som ikke matches af processens publishDir-pattern.
+            # De skal bare ignoreres her.
+            continue
+        fi
 
-                mkdir -p "\$(dirname "\$dst_file")"
+        mirror_source_path "\$published" "\$DEST_DIR/\$base"
+    done
 
-                if [ -L "\$dst_file" ]; then
-                    existing="\$(readlink "\$dst_file")"
-
-                    if [ "\$existing" = "\$src_file" ]; then
-                        continue
-                    fi
-
-                    rm -f "\$dst_file"
-                fi
-
-                if [ -e "\$dst_file" ]; then
-                    continue
-                fi
-
-                ln -s "\$src_file" "\$dst_file"
-            done < <(
-                find . \
-                    -type d -name "\$EXCLUDE_DIRNAME" -prune -o \
-                    -type f -print0
-            )
-        )
-    done < source_dirs.txt
-
-    touch .mirror_output_symlinks.done
+    touch .mirror_published_files.done
     """
 }
 
 
 workflow {
-
-    finalUbamInput
-        .map { meta, data -> params.outBase(meta).toString() }
-        .distinct()
-        .collect()
-        | set { symlink_source_dirs_ch }
 
     if (!params.aligned) {
         if (!params.test) {
@@ -526,7 +541,6 @@ workflow {
             write_dropped_samples_summary(ubam_size_dropped_ch)
             symlinks_ubam_dropped(ubam_ss_merged_size_split.drop)
         }
-
         PREPROCESS(finalUbamInput)
     }
     PRE_PHASING(PREPROCESS.out.alignedFinal)
@@ -615,25 +629,34 @@ workflow {
 
         FAMILY_ANALYSIS.out.done
         | set { family_analysis_done_ch }
+
+        FAMILY_ANALYSIS.out.mirror_items
+        | set { family_analysis_mirror_items_ch }
     }
     else {
         Channel.empty()
         | set { family_analysis_done_ch }
+
+        Channel.empty()
+        | set { family_analysis_mirror_items_ch }
     }
 
-    POST_PHASING.out.done
-        .mix(family_analysis_done_ch)
-        .collect()
-        | set { mirror_trigger_ch }
+    mirror_items_ch = Channel.empty()
+    mirror_items_ch = mirror_items_ch.mix(PREPROCESS.out.mirror_items)
+    mirror_items_ch = mirror_items_ch.mix(PRE_PHASING.out.mirror_items)
+    mirror_items_ch = mirror_items_ch.mix(hiPhase.out.hiphase_bam.map { meta, bam, bai -> tuple(meta, 'alignments/HifiReads', [bam, bai]) })
+    mirror_items_ch = mirror_items_ch.mix(hiPhase.out.hiphase_dv_vcf.map { meta, vcf, tbi -> tuple(meta, 'SNV_and_INDELs', [vcf, tbi]) })
+    mirror_items_ch = mirror_items_ch.mix(hiPhase.out.hiphase_trgt_vcf.map { meta, vcf, tbi -> tuple(meta, 'repeatExpansions/TRGT/diseaseSTRs', [vcf, tbi]) })
+    mirror_items_ch = mirror_items_ch.mix(hiPhase.out.hiphase_dv_wes_roi_vcf.map { meta, vcf, tbi -> tuple(meta, 'SNV_and_INDELs', [vcf, tbi]) })
+    mirror_items_ch = mirror_items_ch.mix(POST_PHASING.out.mirror_items)
+    mirror_items_ch = mirror_items_ch.mix(family_analysis_mirror_items_ch)
 
-    if (!params.test) {
-        MIRROR_OUTPUT_SYMLINKS(
-            mirror_trigger_ch,
-            symlink_source_dirs_ch,
-            params.symlink_mirror_dir,
-            params.symlink_exclude_dirname
-        )
-    }
+    MIRROR_PUBLISHED_FILES(
+        mirror_items_ch,
+        params.symlink_mirror_dir,
+        params.symlink_per_sample_root,
+        params.symlink_publish_wait_seconds
+    )
 }
 
 /*
