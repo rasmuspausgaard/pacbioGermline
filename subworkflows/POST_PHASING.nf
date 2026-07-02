@@ -53,6 +53,7 @@ workflow POST_PHASING {
     nanoStat
 
     main:
+        mirror_items_ch = Channel.empty()
        // pbCPGtools(phasedAll)
        // methBat(pbCPGtools.out)
         methBatNEW_pileup(phasedAll)
@@ -68,6 +69,19 @@ workflow POST_PHASING {
         starphase(phasedAll)
         svTopo(phasedAll)
         svdb_SawFish(phasedAll)
+
+        mirror_items_ch = mirror_items_ch.mix(methBatNEW_pileup.out[0].map { meta, met_files, bedgraph_files -> tuple(meta, 'specialAnalysis/methylation/5mC_bedgraphs', bedgraph_files) })
+        mirror_items_ch = mirror_items_ch.mix(methBatNEW_pileup.out.met5mC.map { meta, bed, tbi -> tuple(meta, 'specialAnalysis/methylation/5mC_pileup', [bed, tbi]) })
+        mirror_items_ch = mirror_items_ch.mix(methBatNEW_profile_single.out.map { meta, profile -> tuple(meta, 'specialAnalysis/methylation/5mC_profile', profile) })
+        mirror_items_ch = mirror_items_ch.mix(cramino.out.map { meta, txt -> tuple(meta, 'QC/cramino', txt) })
+        mirror_items_ch = mirror_items_ch.mix(mitorsaw.out.map { meta, files -> tuple(meta, 'specialAnalysis/mitochondrialVariants', files) })
+        mirror_items_ch = mirror_items_ch.mix(whatsHap_stats.out.multiqc.map { meta, tsv -> tuple(meta, 'QC/whatsHap', tsv) })
+        mirror_items_ch = mirror_items_ch.mix(paraphase4.out[0].map { meta, files -> tuple(meta, 'specialAnalysis/paraphase4', files) })
+        mirror_items_ch = mirror_items_ch.mix(paraphase4.out[1].map { meta, files -> tuple(meta, 'specialAnalysis/paraphase4', files) })
+        mirror_items_ch = mirror_items_ch.mix(kivvi_d4z4.out.map { meta, outdir -> tuple(meta, 'repeatExpansions/Kivvi_D4Z4_contraction', outdir) })
+        mirror_items_ch = mirror_items_ch.mix(starphase.out.map { meta, files -> tuple(meta, 'specialAnalysis/starphase', files) })
+        mirror_items_ch = mirror_items_ch.mix(svTopo.out.map { meta, outdir -> tuple(meta, 'structuralVariants/SVtopo', outdir) })
+        mirror_items_ch = mirror_items_ch.mix(svdb_SawFish.out[0].map { meta, files -> tuple(meta, 'structuralVariants', files) })
 
         /*
             hiPhase_OUT.hiphase_bam
@@ -94,6 +108,7 @@ workflow POST_PHASING {
 
 
         svTopo_filtered(phasedSawfishAF10)
+        mirror_items_ch = mirror_items_ch.mix(svTopo_filtered.out.map { meta, outdir -> tuple(meta, 'structuralVariants/SVtopo_filtered', outdir) })
 
         if (!params.skipQC) {
             Channel.empty()
@@ -113,6 +128,7 @@ workflow POST_PHASING {
             }
             .set { multiqc_inputs_ch }
             multiQC(multiqc_inputs_ch)
+            mirror_items_ch = mirror_items_ch.mix(multiQC.out.map { meta, html -> tuple(meta, 'QC', html) })
         }
 
         post_phasing_done_inputs_ch = Channel.empty()
@@ -136,4 +152,5 @@ workflow POST_PHASING {
 
     emit:
     done = POST_PHASING_DONE.out.done
+    mirror_items = mirror_items_ch
 }
