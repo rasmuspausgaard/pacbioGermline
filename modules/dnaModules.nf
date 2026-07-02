@@ -40,8 +40,8 @@ process check_tmpdir {
 }
 
 process write_input_summary {
-    publishDir "${outputDirBase}/runInfo/${date}_${ssBase}/", mode: 'copy', pattern: "*.txt", enabled: !params.test
-    publishDir "${lrsDocuments}/summaryData/allSamples/", mode: 'copy', pattern: "*.txt", enabled: !params.test
+    publishDir "${outputDirBase}/runInfo/${date}_${ssBase}/", mode: 'copy', pattern: "*.txt"
+    publishDir "${lrsDocuments}/summaryData/allSamples/", mode: 'copy', pattern: "*.txt"
 
     input:
     val(summary_ch)
@@ -57,8 +57,8 @@ process write_input_summary {
 }
 
 process write_dropped_samples_summary {
-    publishDir "${outputDirBase}/runInfo/${date}_${ssBase}/", mode: 'copy', pattern: "*.txt", enabled: !params.test
-    publishDir "${lrsDocuments}/summaryData/droppedSamples/", mode: 'copy', pattern: "*.txt", enabled: !params.test
+    publishDir "${outputDirBase}/runInfo/${date}_${ssBase}/", mode: 'copy', pattern: "*.txt"
+    publishDir "${lrsDocuments}/summaryData/droppedSamples/", mode: 'copy', pattern: "*.txt"
     input:
     val(summary_ch)
 
@@ -73,8 +73,8 @@ process write_dropped_samples_summary {
 }
 
 process write_analyzed_samples_summary {
-    publishDir "${outputDirBase}/runInfo/${date}_${ssBase}/", mode: 'copy', pattern: "*.txt", enabled: !params.test
-    publishDir "${lrsDocuments}/summaryData/analyzedSamples/", mode: 'copy', pattern: "*.txt", enabled: !params.test
+    publishDir "${outputDirBase}/runInfo/${date}_${ssBase}/", mode: 'copy', pattern: "*.txt"
+    publishDir "${lrsDocuments}/summaryData/analyzedSamples/", mode: 'copy', pattern: "*.txt"
     input:
     val(summary_ch)
 
@@ -125,7 +125,7 @@ process inputFiles_symlinks_ubam{
 process symlinks_ubam_dropped {
     label "low"
     
-    publishDir "${outputDirBase}/runInfo/${date}_${ssBase}/dropped_samples_ubam_symlinks/", mode: 'symlink', pattern: '*.{bam,pbi}',overwrite: true, enabled: !params.test
+    publishDir "${outputDirBase}/runInfo/${date}_${ssBase}/dropped_samples_ubam_symlinks/", mode: 'symlink', pattern: '*.{bam,pbi}',overwrite: true
 
 
     input:
@@ -221,7 +221,7 @@ process deepvariant{
     label "veryHigh"
     tag "$meta.id"
 
-    publishDir "${lrsStorage}/deepVariant/gvcf/", mode: 'copy', pattern: "*.deepVariant.g.vcf.*", enabled: !params.test
+    publishDir "${lrsStorage}/deepVariant/gvcf/", mode: 'copy', pattern: "*.deepVariant.g.vcf.*"    
     publishDir {"${params.outBase(meta)}/SNV_and_INDELs/gvcf/"}, mode: 'copy', pattern: "*.deepVariant.g.vcf.*"
 
 
@@ -294,7 +294,7 @@ process hiPhaseTwoAln {
 
     publishDir {"${params.outBase(meta)}/repeatExpansions/TRGT/diseaseSTRs/"}, mode: 'copy', pattern: "*.hiphase.trgt4.*"
 
-    publishDir "${lrsStorage}/deepVariant/vcfs/", mode: 'copy', pattern:"*.hiphase.deepvariant.vcf.*", enabled: !params.test
+    publishDir "${lrsStorage}/deepVariant/vcfs/", mode: 'copy', pattern:"*.hiphase.deepvariant.vcf.*"
 
     input:
     tuple val(meta), val(data), path(vcf), path(sv), path(str)
@@ -306,7 +306,7 @@ process hiPhaseTwoAln {
     
     tuple val(meta), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.vcf.gz"), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.vcf.gz.tbi"), emit: hiphase_dv_vcf
 
-    tuple val(meta), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.WES_ROI.vcf.gz"), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.WES_ROI.vcf.gz.tbi")
+    tuple val(meta), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.WES_ROI.vcf.gz"), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.WES_ROI.vcf.gz.tbi"), emit: hiphase_dv_wes_roi_vcf
 
     tuple val(meta), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.sawfish.vcf.gz"), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.sawfish.vcf.gz.tbi"), emit: hiphase_sawfish_vcf
    
@@ -388,7 +388,7 @@ process hiPhase {
 
     publishDir {"${params.outBase(meta)}/repeatExpansions/TRGT/diseaseSTRs/"}, mode: 'copy', pattern: "*.hiphase.trgt4.*"
 
-    publishDir "${lrsStorage}/deepVariant/vcfs/", mode: 'copy', pattern:"*.hiphase.deepvariant.vcf.*", enabled: !params.test
+    publishDir "${lrsStorage}/deepVariant/vcfs/", mode: 'copy', pattern:"*.hiphase.deepvariant.vcf.*"
 
     input:
     tuple val(meta), val(data), path(vcf), path(sv), path(str)
@@ -399,7 +399,7 @@ process hiPhase {
      
     tuple val(meta), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.vcf.gz"), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.vcf.gz.tbi"), emit: hiphase_dv_vcf
 
-    tuple val(meta), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.WES_ROI.vcf.gz"), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.WES_ROI.vcf.gz.tbi")
+    tuple val(meta), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.WES_ROI.vcf.gz"), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.deepvariant.WES_ROI.vcf.gz.tbi"), emit: hiphase_dv_wes_roi_vcf
 
     tuple val(meta), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.sawfish.vcf.gz"), path("${meta.id}.${genome_version}.${readSubset_hifiDefault}.hiphase.sawfish.vcf.gz.tbi"), emit: hiphase_sawfish_vcf
    
@@ -496,7 +496,7 @@ process svdb_SawFish {
     label "low"
     conda "${params.svdb}"
 
-    publishDir "${lrsStorage}/structuralVariants/sawfish/", mode: 'copy',pattern: "*.sawfishSV.hiphase.svdb.vcf*", enabled: !params.test
+    publishDir "${lrsStorage}/structuralVariants/sawfish/", mode: 'copy',pattern: "*.sawfishSV.hiphase.svdb.vcf*"
 
     publishDir {"${params.outBase(meta)}/structuralVariants/"}, mode: 'copy', pattern: "*.sawfishSV.hiphase.svdb.*"
 
@@ -609,7 +609,7 @@ process svdb_sawFish2_jointCall_caseID {
     tuple val(meta), path(vcf), path(idx)
     
     output:
-    path("*_jointCall.svdb.*")
+    tuple val(meta), path("*_jointCall.svdb.*")
     tuple val(meta), path("${meta.caseID}.${genome_version}.${readSubset_hifiDefault}.sawfishSV_jointCall.svdb.AF_below10pct.vcf.gz"),path("${meta.caseID}.${genome_version}.${readSubset_hifiDefault}.sawfishSV_jointCall.svdb.AF_below10pct.vcf.gz.tbi"), emit: sawfish_caseID_AF10
     script:
     """
@@ -736,7 +736,7 @@ process trgt4_diseaseSTRs{
     
     publishDir {"${params.outBase(meta)}/repeatExpansions/TRGT/bam"}, mode: 'copy', pattern: "*.sorted.ba*"
 
-    publishDir "${lrsStorage}/STRs/repeatExpansions/TRGT/diseaseSTRs/", mode: 'copy', pattern:"*.sorted.vcf.*", enabled: !params.test
+    publishDir "${lrsStorage}/STRs/repeatExpansions/TRGT/diseaseSTRs/", mode: 'copy', pattern:"*.sorted.vcf.*"
 
     input:
     tuple val(meta), val(data)
@@ -868,7 +868,7 @@ process trgt4_all {
     
     publishDir {"${params.outBase(meta)}/repeatExpansions/TRGT/allSTRs/"}, mode: 'copy', pattern: "*.sorted.vcf.*"
 
-    publishDir "${lrsStorage}/STRs/repeatExpansions/TRGT/all/", mode: 'copy', pattern:"*.sorted.vcf.*", enabled: !params.test
+    publishDir "${lrsStorage}/STRs/repeatExpansions/TRGT/all/", mode: 'copy', pattern:"*.sorted.vcf.*"
 
     input:
     tuple val(meta), val(data)
@@ -1270,7 +1270,7 @@ process exo14_2508_exome {
     tuple val(meta), path(vcf), path(idx), path(hpo), path(samplesheet)
 
     output:
-    path("*.{html,tsv,vcf,json,hpo.txt,yml,ped}")
+    tuple val(meta), path("*.{html,tsv,vcf,json,hpo.txt,yml,ped}")
 
     script:
     """
@@ -1304,7 +1304,7 @@ process exo14_2508_genome {
     tuple val(meta), path(vcf), path(idx), path(hpo), path(samplesheet)
 
     output:
-    path("*.{html,tsv,vcf,json}")
+    tuple val(meta), path("*.{html,tsv,vcf,json}")
 
     script:
     """
@@ -1337,7 +1337,7 @@ process exo14_2508_SV {
     tuple val(meta), path(vcf), path(idx), path(hpo), path(samplesheet)
 
     output:
-    path("*.{html,tsv,vcf,json,hpo.txt,yml,ped}")
+    tuple val(meta), path("*.{html,tsv,vcf,json,hpo.txt,yml,ped}")
 
     script:
     """
@@ -1375,7 +1375,7 @@ process pbCPGtools {
 
     publishDir {"${params.outBase(meta)}/specialAnalysis/methylation/BigWigBed/"}, mode: 'copy', pattern: "*.methylation.{hap1,hap2,combined}.*"
 
-    publishDir "${lrsStorage}/methylation/pbCpGtools/${meta.id}/", mode: 'copy', pattern:"*.bed.*", enabled: !params.test
+    publishDir "${lrsStorage}/methylation/pbCpGtools/${meta.id}/", mode: 'copy', pattern:"*.bed.*"
 
     input:
     tuple val(meta), val(data)
@@ -1398,7 +1398,7 @@ process methBat{
 
     publishDir {"${params.outBase(meta)}/specialAnalysis/methylation/"}, mode: 'copy'
 
-    publishDir "${lrsStorage}/methylation/methBatProfiles/", mode: 'copy', pattern:"*.profile", enabled: !params.test
+    publishDir "${lrsStorage}/methylation/methBatProfiles/", mode: 'copy', pattern:"*.profile"
 
 
     input:
@@ -1439,7 +1439,7 @@ process methBatNEW_pileup{
     publishDir {"${params.outBase(meta)}/specialAnalysis/methylation/5mC_pileup/"},   mode: 'copy',   pattern: "*.5mC.bed.*"
     publishDir {"${params.outBase(meta)}/specialAnalysis/methylation/5mC_bedgraphs/"},   mode: 'copy',   pattern: "*.5mC.bedgraph.*"
 
-    publishDir "${lrsStorage}/methylationNEW/5mC_pileup/",   mode: 'copy',   pattern: "*.5mC.bed.*", enabled: !params.test
+    publishDir "${lrsStorage}/methylationNEW/5mC_pileup/",   mode: 'copy',   pattern: "*.5mC.bed.*"
 
   //  publishDir {"${params.outBase(meta)}/specialAnalysis/methylation/5hmC/"},  mode: 'copy',   pattern: "*.5hmC.bed.*"
    // publishDir {"${params.outBase(meta)}/specialAnalysis/methylation/6mA/"},   mode: 'copy',   pattern: "*.6mA.bed.*"
@@ -1475,7 +1475,7 @@ process methBatNEW_profile_single {
     conda "${params.methbat_v1}"
 
     publishDir {"${params.outBase(meta)}/specialAnalysis/methylation/5mC_profile/"},   mode: 'copy',   pattern: "*.5mC.cpgIslands.profile.tsv"
-    publishDir "${lrsStorage}/methylationNEW/5mC_CGI_profiles/", mode: 'copy', pattern:"*.profile.tsv", enabled: !params.test
+    publishDir "${lrsStorage}/methylationNEW/5mC_CGI_profiles/", mode: 'copy', pattern:"*.profile.tsv"
     input:
     tuple val(meta), path(data), path(tbi)
     
@@ -1597,7 +1597,7 @@ process multiQC {
     tuple val(meta),  path(qcfiles)  
 
     output:
-    path ("*MultiQC*.html")
+    tuple val(meta), path ("*MultiQC*.html")
 
     script:
     def reportName = (params.layoutMode == 'jointAnalysis') ? "${meta.caseID}.MultiQC.DNA.html" : "${meta.id}.MultiQC.DNA.html"
@@ -1621,7 +1621,7 @@ process multiQC_ALL {
     label "low"
     conda "${params.multiqc}"
 
-    publishDir "${outputDirBase}/runInfo/${date}_${ssBase}/", mode: 'copy', enabled: !params.test
+    publishDir "${outputDirBase}/runInfo/${date}_${ssBase}/", mode: 'copy'
 
     when:
     params.groupedOutput
