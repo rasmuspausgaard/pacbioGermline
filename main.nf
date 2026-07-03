@@ -955,10 +955,18 @@ workflow {
 
 
     if (!params.test && params.genome == "hg38" && !params.skipVariants && !params.skipSV) {
+        /*
+         * VSpipeline skal bruge Sawfish fra den aktuelle pipeline-kørsel.
+         * phasedAll indeholder allerede hiPhase-Sawfish som:
+         *   data.sawfish_vcf / data.sawfish_idx
+         *
+         * Derfor skal vi ikke længere joine mod POST_PHASING.out.sawfishAF10.
+         * modules/vspipeline.nf har fallback:
+         *   data.sawfish10_vcf ?: data.sawfish_vcf
+         */
         phasedAll
-        .join(POST_PHASING.out.sawfishAF10)
-        | map { meta, data, sv10_vcf, sv10_idx ->
-            tuple(meta, data + [sawfish10_vcf: sv10_vcf, sawfish10_idx: sv10_idx])
+        | map { meta, data ->
+            tuple(meta, data)
         }
         | filter { meta, data ->
             def normalizedTestlist = (meta.testlist ?: '')
