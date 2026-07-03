@@ -11,6 +11,9 @@ if (!params.containsKey('vspipelineOnly')) params.vspipelineOnly = false
 if (!params.containsKey('symlink_mirror_dir')) params.symlink_mirror_dir = "/lnx01_data2/shared/patients/pacbioLRS/${params.genome}/2026/perSampleAnalysis"
 if (!params.containsKey('symlink_per_sample_root')) params.symlink_per_sample_root = "${outputDirBase}/perSampleAnalysis"
 if (!params.containsKey('symlink_publish_wait_seconds')) params.symlink_publish_wait_seconds = 120
+if (!params.containsKey('symlink_storage')) params.symlink_storage = true
+if (!params.containsKey('symlink_storage_dir')) params.symlink_storage_dir = "/lnx01_data3/storage/pacBioLRS/analyzedData/symlinks"
+if (!params.containsKey('symlink_storage_wait_seconds')) params.symlink_storage_wait_seconds = params.symlink_publish_wait_seconds
 
 log.info """\
 ======================================================
@@ -28,6 +31,8 @@ OutputDirBase : ${outputDirBase}
 workDir       : ${workflow.workDir}
 layout        : $params.layoutMode
 min input GB  : $params.minGB
+Mirror dir    : $params.symlink_mirror_dir
+Storage index : $params.symlink_storage_dir
 """
 
 
@@ -669,6 +674,186 @@ process MIRROR_PUBLISHED_FILES {
 }
 
 
+process PACBIO_SYMLINK_STORAGE {
+    tag { meta.id }
+    label "low"
+
+    input:
+    tuple val(meta), path(bam), path(bai)
+    val storage_base
+    val wait_seconds
+
+    output:
+    path ".pacbio_symlink_storage.done", emit: done
+
+    when:
+    !params.test && params.symlink_storage
+
+    script:
+    def sourceBase = params.outBase(meta).toString()
+    """
+    set -euo pipefail
+
+    SOURCE_BASE="${sourceBase}"
+    STORAGE_BASE="${storage_base}"
+    WAIT_SECONDS="${wait_seconds}"
+
+    BAM_BASENAME="\$(basename "${bam}")"
+    BAI_BASENAME="\$(basename "${bai}")"
+
+    PUBLISHED_BAM="\$SOURCE_BASE/alignments/HifiReads/\$BAM_BASENAME"
+    PUBLISHED_BAI="\$SOURCE_BASE/alignments/HifiReads/\$BAI_BASENAME"
+
+    SAMPLE_DIR_NAME="\$(basename "\$SOURCE_BASE")"
+
+    HIFI_BAM_DST="\$STORAGE_BASE/alignment/hifi"
+    HIFI_DUP_DST="\$HIFI_BAM_DST/duplicateBAMs"
+
+    mkdir -p "\$HIFI_BAM_DST"
+
+    wait_for_file() {
+        local f="\$1"
+        local waited=0
+
+        while [ ! -f "\$f" ] && [ "\$waited" -lt "\$WAIT_SECONDS" ]; do
+            sleep 1
+            waited=\$((waited + 1))
+        done
+
+        [ -f "\$f" ]
+    }
+
+    safe_link_no_overwrite() {
+        local src="\$1"
+        local dst="\$2"
+
+        mkdir -p "\$(dirname "\$dst")"
+
+        if [ -L "\$dst" ]; then
+            local existing
+            existing="\$(readlink "\$dst")"
+            if [ "\$existing" = "\$src" ]; then
+                return 0
+            fi
+            echo "  WARNING: \$dst already points to \$existing (expected \$src) — skipping" >&2
+            return 0
+        fi
+
+        if [ -e "\$dst" ]; then
+            echo "  WARNING: \$dst exists and is not a symlink — skipping" >&2
+            return 0
+        fi
+
+        ln -s "\$src" "\$dst"
+    }
+
+    find_index_for_bam() {
+        local b="\$1"
+        for idx in "\$b.bai" "\${b%.bam}.bai" "\${b%.bam}.csi"; do
+            if [ -f "\$idx" ]; then
+                echo "\$idx"
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    link_duplicate_bam_set() {
+        local src_bam="\$1"
+        local src_bai="\${2:-}"
+        local sample_name="\$3"
+
+        mkdir -p "\$HIFI_DUP_DST"
+
+        local bam_base
+        bam_base="\$(basename "\$src_bam")"
+        safe_link_no_overwrite "\$src_bam" "\$HIFI_DUP_DST/\${sample_name}__\$bam_base"
+
+        if [ -n "\$src_bai" ] && [ -f "\$src_bai" ]; then
+            local bai_base
+            bai_base="\$(basename "\$src_bai")"
+            safe_link_no_overwrite "\$src_bai" "\$HIFI_DUP_DST/\${sample_name}__\$bai_base"
+        fi
+    }
+
+    link_primary_current_set() {
+        local replace_existing="\${1:-0}"
+        local dst_bam="\$HIFI_BAM_DST/\$BAM_BASENAME"
+        local dst_bai="\$HIFI_BAM_DST/\$BAI_BASENAME"
+
+        if [ "\$replace_existing" = "1" ]; then
+            rm -f "\$dst_bam"
+        fi
+
+        safe_link_no_overwrite "\$PUBLISHED_BAM" "\$dst_bam"
+
+        if [ -f "\$PUBLISHED_BAI" ]; then
+            if [ "\$replace_existing" = "1" ] && [ -L "\$dst_bai" ]; then
+                rm -f "\$dst_bai"
+            fi
+            safe_link_no_overwrite "\$PUBLISHED_BAI" "\$dst_bai"
+        else
+            echo "  WARNING: published BAI not found for \$PUBLISHED_BAM: \$PUBLISHED_BAI" >&2
+        fi
+    }
+
+    echo "=== pacbio_symlinkStorage current pipeline sample ==="
+    echo "  Sample        : \$SAMPLE_DIR_NAME"
+    echo "  Source BAM    : \$PUBLISHED_BAM"
+    echo "  Storage base  : \$STORAGE_BASE"
+    echo
+
+    if ! wait_for_file "\$PUBLISHED_BAM"; then
+        echo "  WARNING: published BAM not found after \$WAIT_SECONDS seconds — skipping storage symlink for this sample" >&2
+        touch .pacbio_symlink_storage.done
+        exit 0
+    fi
+
+    # BAI is allowed to be delayed/missing, but we wait for it briefly because
+    # hiPhase publishes BAM/BAI asynchronously.
+    wait_for_file "\$PUBLISHED_BAI" || true
+
+    PRIMARY_BAM="\$HIFI_BAM_DST/\$BAM_BASENAME"
+
+    if [ -L "\$PRIMARY_BAM" ]; then
+        existing_bam="\$(readlink "\$PRIMARY_BAM")"
+
+        if [ "\$existing_bam" = "\$PUBLISHED_BAM" ]; then
+            echo "  Primary link already correct: \$PRIMARY_BAM"
+            link_primary_current_set 0
+        else
+            existing_size="\$(stat -c '%s' "\$existing_bam" 2>/dev/null || echo 0)"
+            current_size="\$(stat -c '%s' "\$PUBLISHED_BAM" 2>/dev/null || echo 0)"
+
+            if [ "\$current_size" -gt "\$existing_size" ] && [ -e "\$existing_bam" ]; then
+                existing_sample="\$(basename "\$(dirname "\$(dirname "\$(dirname "\$existing_bam")")")")"
+                existing_bai="\$(find_index_for_bam "\$existing_bam" || true)"
+
+                echo "  DUPLICATE basename: \$BAM_BASENAME" >&2
+                echo "  Current BAM is larger; promoting current BAM to primary and moving old primary to duplicateBAMs." >&2
+
+                link_duplicate_bam_set "\$existing_bam" "\$existing_bai" "\$existing_sample"
+                link_primary_current_set 1
+            else
+                echo "  DUPLICATE basename: \$BAM_BASENAME" >&2
+                echo "  Existing primary is kept; current pipeline sample goes to duplicateBAMs." >&2
+                link_duplicate_bam_set "\$PUBLISHED_BAM" "\$PUBLISHED_BAI" "\$SAMPLE_DIR_NAME"
+            fi
+        fi
+    elif [ -e "\$PRIMARY_BAM" ]; then
+        echo "  WARNING: \$PRIMARY_BAM exists and is not a symlink — current sample goes to duplicateBAMs" >&2
+        link_duplicate_bam_set "\$PUBLISHED_BAM" "\$PUBLISHED_BAI" "\$SAMPLE_DIR_NAME"
+    else
+        echo "  Creating primary storage link: \$PRIMARY_BAM"
+        link_primary_current_set 0
+    fi
+
+    touch .pacbio_symlink_storage.done
+    """
+}
+
+
+
 workflow {
 
     if (params.vspipelineOnly) {
@@ -905,6 +1090,12 @@ workflow {
         params.symlink_mirror_dir,
         params.symlink_per_sample_root,
         params.symlink_publish_wait_seconds
+    )
+
+    PACBIO_SYMLINK_STORAGE(
+        hiPhase.out.hiphase_bam,
+        params.symlink_storage_dir,
+        params.symlink_storage_wait_seconds
     )
     }
 
