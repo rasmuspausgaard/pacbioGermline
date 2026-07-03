@@ -252,3 +252,4 @@ workflow EXOMISER_ONLY_ENTRY {
         .combine(ss_ch)
         | exo14_2508_SV
 }
+
