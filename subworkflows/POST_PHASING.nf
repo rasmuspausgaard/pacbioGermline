@@ -92,15 +92,19 @@ workflow POST_PHASING {
             |set {phasedSawfishAF10}   
         */
 
+        /*
+         * svTopo_filtered bruger feltnavnene sawfish10_vcf/sawfish10_idx,
+         * men hvis AF_below10pct ikke produceres, bruger vi den almindelige
+         * hiPhase-Sawfish VCF fra phasedAll som fallback.
+         */
         phasedAll
-        .join(svdb_SawFish.out.sawfishAF10)
         .join(sawfish_supporting_reads)
-        | map { meta, data, sv10_vcf, sv10_idx, sv_jsonReads ->
+        | map { meta, data, sv_jsonReads ->
             tuple(meta, [
                 bam:            data.bam,
                 bai:            data.bai,
-                sawfish10_vcf:  sv10_vcf,
-                sawfish10_idx:  sv10_idx,
+                sawfish10_vcf:  data.sawfish_vcf,
+                sawfish10_idx:  data.sawfish_idx,
                 sawfish_reads:  sv_jsonReads
             ])
         }
@@ -141,7 +145,7 @@ workflow POST_PHASING {
         post_phasing_done_inputs_ch = post_phasing_done_inputs_ch.mix(kivvi_d4z4.out.map { 1 })
         post_phasing_done_inputs_ch = post_phasing_done_inputs_ch.mix(starphase.out.map { 1 })
         post_phasing_done_inputs_ch = post_phasing_done_inputs_ch.mix(svTopo.out.map { 1 })
-        post_phasing_done_inputs_ch = post_phasing_done_inputs_ch.mix(svdb_SawFish.out.sawfishAF10.map { 1 })
+        post_phasing_done_inputs_ch = post_phasing_done_inputs_ch.mix(svdb_SawFish.out[0].map { 1 })
         post_phasing_done_inputs_ch = post_phasing_done_inputs_ch.mix(svTopo_filtered.out.map { 1 })
 
         if (!params.skipQC) {
