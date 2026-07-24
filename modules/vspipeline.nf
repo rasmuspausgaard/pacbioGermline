@@ -81,7 +81,7 @@ params.vspipeline_configs = params.vspipeline_configs ?: [
     ],
 
     SL_NGC_SJAELDNE: [
-        template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN_LRS-WGS v260530.2.vsproject-template',
+        template_path: '/appdata/VarSeq/User Data/ProjectTemplates/REKV_NPN.LRS-WGS v260624.vsproject-template',
         project_base_host: '/data/shared/VarSeq/projects/WGS_NGC/Sjaeldne.sygdomme/Pacbio/2026',
         project_base_container: '/appdata/projects/WGS_NGC/Sjaeldne.sygdomme/Pacbio/2026',
         bnd_table_id: 'Breakends'
