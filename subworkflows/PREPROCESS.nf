@@ -44,7 +44,7 @@ workflow PREPROCESS {
     .map {meta,hifiBam,hifiBai,failBam,failBai -> 
         tuple(meta, [
                 hifiBam:hifiBam,
-                hifiBai:hifiBai
+                hifiBai:hifiBai,
                 failBam:failBam,
                 failBai:failBai                    
             ])
