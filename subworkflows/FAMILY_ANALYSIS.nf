@@ -10,41 +10,19 @@ include { glNexus_jointCall;
           exo14_2508_SV } from "../modules/dnaModules.nf"
 
 
-process FAMILY_ANALYSIS_DONE {
-    tag "family_analysis_done"
-    label "low"
-
-    input:
-    val trigger
-
-    output:
-    path ".family_analysis.done", emit: done
-
-    script:
-    """
-    touch .family_analysis.done
-    """
-}
-
 
 workflow FAMILY_ANALYSIS {
 
     take:
     glnexus_manifest_ch      // tuple(meta, manifestFile)
     sawfish_manifest_ch      // tuple(meta, manifestFile)
-    hpo_ch                   // optional — channel.empty() if not provided
+    hpo_ch                   // optional — Channel.empty() if not provided
     ss_ch                    // samplesheet path channel
 
     main:
-    mirror_items_ch = channel.empty()
     glNexus_jointCall(glnexus_manifest_ch)
     sawFish2_jointCall_caseID(sawfish_manifest_ch)
     svdb_sawFish2_jointCall_caseID(sawFish2_jointCall_caseID.out.sv_jointCall_caseID_vcf)
-
-    mirror_items_ch = mirror_items_ch.mix(glNexus_jointCall.out.glnexus_vcf.map { meta, vcf, tbi -> tuple(meta, 'jointCalls', [vcf, tbi]) })
-    mirror_items_ch = mirror_items_ch.mix(glNexus_jointCall.out.glnexus_wes_roi_vcf.map { meta, vcf, tbi -> tuple(meta, 'jointCalls', [vcf, tbi]) })
-    mirror_items_ch = mirror_items_ch.mix(glNexus_jointCall.out[1].map { meta, manifest -> tuple(meta, 'documents', manifest) })
-    mirror_items_ch = mirror_items_ch.mix(svdb_sawFish2_jointCall_caseID.out[0].map { meta, files -> tuple(meta, 'jointCalls', files) })
 
     if (params.hpo) {
 
@@ -65,30 +43,7 @@ workflow FAMILY_ANALYSIS {
             .combine(hpo_ch)
             .combine(ss_ch)
             | exo14_2508_SV
-
-        mirror_items_ch = mirror_items_ch.mix(exo14_2508_exome.out.map { meta, files -> tuple(meta, 'exomiser14_2508/exomiser', files) })
-        mirror_items_ch = mirror_items_ch.mix(exo14_2508_exome.out.map { meta, files -> tuple(meta, 'documents', files) })
-        mirror_items_ch = mirror_items_ch.mix(exo14_2508_genome.out.map { meta, files -> tuple(meta, 'exomiser14_2508/genomiser', files) })
-        mirror_items_ch = mirror_items_ch.mix(exo14_2508_SV.out.map { meta, files -> tuple(meta, 'exomiser14_2508/exomiserStructuralVariants', files) })
-        mirror_items_ch = mirror_items_ch.mix(exo14_2508_SV.out.map { meta, files -> tuple(meta, 'documents', files) })
     }
-
-    family_analysis_done_inputs_ch = channel.empty()
-    family_analysis_done_inputs_ch = family_analysis_done_inputs_ch.mix(glNexus_jointCall.out.glnexus_vcf.map { 1 })
-    family_analysis_done_inputs_ch = family_analysis_done_inputs_ch.mix(glNexus_jointCall.out.glnexus_wes_roi_vcf.map { 1 })
-    family_analysis_done_inputs_ch = family_analysis_done_inputs_ch.mix(svdb_sawFish2_jointCall_caseID.out.sawfish_caseID_AF10.map { 1 })
-
-    if (params.hpo) {
-        family_analysis_done_inputs_ch = family_analysis_done_inputs_ch.mix(exo14_2508_exome.out.map { 1 })
-        family_analysis_done_inputs_ch = family_analysis_done_inputs_ch.mix(exo14_2508_genome.out.map { 1 })
-        family_analysis_done_inputs_ch = family_analysis_done_inputs_ch.mix(exo14_2508_SV.out.map { 1 })
-    }
-
-    FAMILY_ANALYSIS_DONE(family_analysis_done_inputs_ch.collect())
-
-    emit:
-    done = FAMILY_ANALYSIS_DONE.out.done
-    mirror_items = mirror_items_ch
 }
 
 
@@ -130,14 +85,8 @@ workflow FAMILY_ANALYSIS_ENTRY {
     Channel.of( tuple(anchorMeta, file(params.sawfishCSV)) )
     | set { sawfish_manifest_ch }
     
-    if (params.hpo) {
-        channel.fromPath(params.hpo) | set { hpo_ch }
-    }
-    else {
-        channel.empty() | set { hpo_ch }
-    }
-
-    channel.fromPath(params.familySS) | set { ss_ch }
+    def hpo_ch = params.hpo ? channel.fromPath(params.hpo) : Channel.empty()
+    def ss_ch  = channel.fromPath(params.familySS)
 
     FAMILY_ANALYSIS(
         glnexus_manifest_ch,
