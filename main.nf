@@ -6,12 +6,6 @@ date2=new Date().format( 'yyMMdd HH:mm:ss' )
 user="$USER"
 runID="${date}.${user}"
 
-if (!params.containsKey('test')) params.test = false
-if (!params.containsKey('vspipelineOnly')) params.vspipelineOnly = false
-if (!params.containsKey('symlink_mirror_dir')) params.symlink_mirror_dir = "/lnx01_data2/shared/patients/pacbioLRS/${params.genome}/2026/perSampleAnalysis"
-if (!params.containsKey('symlink_per_sample_root')) params.symlink_per_sample_root = "${outputDirBase}/perSampleAnalysis"
-if (!params.containsKey('symlink_publish_wait_seconds')) params.symlink_publish_wait_seconds = 120
-
 log.info """\
 ======================================================
 Clinical Genetics Vejle: PacBio LRS v4
@@ -59,9 +53,8 @@ def hpoInputError() {
 }
 
 
-if (!params.samplesheet && !params.input && !params.familySS) exit 0, inputError()
-if (params.vspipelineOnly && !params.samplesheet) exit 0, "USER INPUT ERROR: --vspipelineOnly requires --samplesheet so old output paths can be reconstructed."
-if (!params.samplesheet && params.hpo && !params.familySS) exit 0, hpoInputError()
+if (!params.samplesheet && !params.input && !params.familySS) exit 0, inputError() 
+if (!params.samplesheet && params.hpo && !params.familySS) exit 0, hpoInputError() 
 
 
 if (params.hpo) {
@@ -70,147 +63,13 @@ if (params.hpo) {
 }
 
 
-
-/*
-================================================================================
- VSpipeline-only mode from the normal samplesheet
-================================================================================
-
-This mode does not run alignment, DeepVariant, Sawfish, HiPhase, SVDB, QC or STR.
-It only parses the normal pacbioGermline samplesheet and reconstructs the expected
-published output paths using params.outBase(meta) and the standard filenames.
-*/
-
-if (params.vspipelineOnly) {
-
-    if (params.samplesheet && !params.customSS && !params.jointSS && !params.familySS) {
-
-        def ssBase = params.samplesheet
-                    .toString()
-                    .tokenize('/')
-                    .last()
-                    .replaceFirst(/_metadata$/, '')
-
-        channel.fromPath(params.samplesheet)
-        | splitCsv(sep:'\t')
-        | map { row ->
-            (rekv, npn, material, testlist, gender, proband, intRef) = row[0].tokenize("_")
-            def groupKey = (intRef == 'noInfo') ? "single" : intRef
-            def sex      = (gender == "K") ? "female" : "male"
-            meta = [
-                id       : npn,
-                testlist : testlist,
-                sex      : sex,
-                proband  : proband,
-                intRef   : intRef,
-                rekv     : rekv,
-                groupKey : groupKey,
-                ssBase   : ssBase
-            ]
-            meta
-        }
-        | set { samplesheet_full }
-    }
-
-    if (params.samplesheet && params.customSS) {
-
-        def ssBase = params.samplesheet
-                    .toString()
-                    .tokenize('/')
-                    .last()
-                    .replaceFirst(/\.txt$/, '')
-
-        channel.fromPath(params.samplesheet)
-        | splitCsv(sep:'\t')
-        | map { row ->
-            def caseID = row[0]
-            def samplename = row[1]
-            def sex = row[2]
-            def testlist = params.vspipeline_testlist ?: (row.size() > 3 ? row[3] : '')
-            meta = [
-                caseID   : caseID,
-                id       : samplename,
-                sex      : sex,
-                testlist : testlist,
-                groupKey : "customSampleSheet",
-                outKey   : caseID,
-                ssBase   : ssBase,
-                rekv     : caseID
-            ]
-            meta
-        }
-        | set { samplesheet_full }
-    }
-
-    if (params.samplesheet && (params.jointSS || params.familySS)) {
-
-        def ssBase = params.samplesheet
-                    .toString()
-                    .tokenize('/')
-                    .last()
-                    .replaceFirst(/\.txt$/, '')
-
-        channel.fromPath(params.samplesheet)
-        | splitCsv(sep: '\t')
-        | map { row ->
-            def (rekv, npn, material, testlist, gender, proband, intRef) = row
-            def sex = (gender == 'K') ? 'female' : 'male'
-
-            def meta = [
-                rekv     : rekv,
-                id       : npn,
-                material : material,
-                testlist : testlist,
-                gender   : gender,
-                sex      : sex,
-                proband  : proband,
-                intRef   : intRef,
-                ssBase   : ssBase,
-                outKey   : 'multiSampleAnalysis',
-                groupKey : intRef
-            ]
-
-            tuple(intRef, meta)
-        }
-        .groupTuple()
-        .flatMap { intRef, metas ->
-
-            def probands = metas.findAll { it.proband == 'T' }
-            assert probands && probands.size() >= 1 : "No proband (T) found for intRef=${intRef}"
-
-            def anchor = probands[0]
-            def caseID = "${anchor.rekv}_${anchor.testlist}_${intRef}"
-
-            metas.collect { m ->
-                def relation
-                if (m.proband == 'T') {
-                    relation = 'index'
-                } else if (m.gender == 'M') {
-                    relation = 'pater'
-                } else if (m.gender == 'K') {
-                    relation = 'mater'
-                } else {
-                    relation = 'unknown_relation'
-                }
-
-                m + [
-                    caseID   : caseID,
-                    relation : relation
-                ]
-            }
-        }
-        | set { samplesheet_full }
-    }
-}
-
-
-if (!params.vspipelineOnly && params.aligned) {
+if (params.aligned) {
 
     inputBam="${params.input}/*.bam"
     inputBai="${params.input}/*.bai"
 
-    Channel.fromPath(inputBam, followLinks: true)
-    |map { tuple(it.baseName,it) }
+    channel.fromPath(inputBam, followLinks: true)
+    |map { f -> tuple(f.baseName, f) }
     |map {id,bam -> 
             (samplename,genomeversion)      =id.tokenize(".")
             meta=[id:samplename,genomeversion:genomeversion,type:"aligned"]
@@ -218,8 +77,8 @@ if (!params.vspipelineOnly && params.aligned) {
         }
     |set {bamInput}
 
-    Channel.fromPath(inputBai, followLinks: true)
-    |map { tuple(it.baseName,it) }
+    channel.fromPath(inputBai, followLinks: true)
+    |map { f -> tuple(f.baseName, f) }
     |map {id,bai -> 
             (samplename,genomeversion)      =id.tokenize(".")
             meta=[id:samplename,genomeversion:genomeversion,type:"aligned"]
@@ -244,7 +103,7 @@ if (!params.vspipelineOnly && params.aligned) {
 }
 
 
-if (!params.vspipelineOnly && !params.aligned) {
+if (!params.aligned) {
 
     if (params.input) {
         if (params.hifiReads){
@@ -260,13 +119,13 @@ if (!params.vspipelineOnly && !params.aligned) {
     
     if (!params.input) {
         if (params.hifiReads){
-            inputBam="${params.dataArchive}/**/*.hifi_reads.*.bam"
+            inputBam="${params.dataArchive}/**/hifi_reads/*.hifi_reads.*.bam"
         }
         if (params.failedReads){
-            inputBam="${params.dataArchive}/**/*.fail_reads.*.bam"
+            inputBam="${params.dataArchive}/**/failed_reads/*.fail_reads.*.bam"
         }
         if (!params.hifiReads && !params.failedReads) {
-            inputBam="${params.dataArchive}/**/*.bam"
+            inputBam="${params.dataArchive}/**/*_reads/*.bam"
         }
     }
 
@@ -304,10 +163,8 @@ if (!params.vspipelineOnly && !params.aligned) {
         }
         |set {samplesheetBranch}
     }
-                //def outKey      = (intRef == 'noInfo')  ? "singleSampleAnalysis" : "multiSampleAnalysis"
-
-                    //outKey      :outKey,
-    // intermediate naming scheme:
+ 
+   /*
     if (params.samplesheet && params.customSS) {
 
         def ssBase = params.samplesheet
@@ -325,16 +182,15 @@ if (!params.vspipelineOnly && !params.aligned) {
         }
         | set {samplesheet_full}
     }
-
-    if (params.samplesheet && (params.jointSS || params.familySS) ) {
+*/
+    if (params.samplesheet && (params.jointSS || params.familySS|| params.customSS) ) {
         def ssBase = params.samplesheet
                     .toString()
                     .tokenize('/')
                     .last()
                     .replaceFirst(/\.txt$/, '')
 
-    Channel
-    .fromPath(params.samplesheet)
+    channel.fromPath(params.samplesheet)
     .splitCsv(sep: '\t')
     .map { row ->
         def (rekv, npn, material, testlist, gender, proband, intRef) = row
@@ -350,7 +206,6 @@ if (!params.vspipelineOnly && !params.aligned) {
         proband  : proband,
         intRef   : intRef,
         ssBase   : ssBase,
-        outKey   : 'multiSampleAnalysis',
         groupKey : intRef
         ]
 
@@ -389,8 +244,8 @@ if (!params.vspipelineOnly && !params.aligned) {
 
 
     if (params.samplesheet) {
-        Channel.fromPath(inputBam, followLinks: true)
-        |map { tuple(it.baseName,it) }
+        channel.fromPath(inputBam, followLinks: true)
+        |map { f -> tuple(f.baseName, f) }
         |map {id,bam -> 
                 (samplenameFull,pacbioID,readset,barcode)   =id.tokenize(".")
                 (instrument,date,time)                      =pacbioID.tokenize("_")     
@@ -497,8 +352,8 @@ if (!params.vspipelineOnly && !params.aligned) {
     }
 
     if (!params.samplesheet) {
-        Channel.fromPath(inputBam, followLinks: true)
-        |map { tuple(it.baseName,it) }
+        channel.fromPath(inputBam, followLinks: true)
+        |map { f -> tuple(f.baseName, f) }
 
         |map {id,bam -> 
                 (samplenameFull,pacbioID,readset,barcode)   =id.tokenize(".")
@@ -551,202 +406,27 @@ include { PRE_PHASING }             from './subworkflows/PRE_PHASING.nf'
 include { POST_PHASING }            from './subworkflows/POST_PHASING.nf'
 include { FAMILY_ANALYSIS }         from './subworkflows/FAMILY_ANALYSIS.nf'
 include { FAMILY_ANALYSIS_ENTRY }   from './subworkflows/FAMILY_ANALYSIS.nf'
-include { VSpipeline }             from './modules/vspipeline.nf'
 ////////////////// WORKFLOWS AND PROCESSES ///////////////////////
-
-
-
-process MIRROR_PUBLISHED_FILES {
-    tag { "${meta.id}:${rel_dir}" }
-    label "low"
-
-    input:
-    tuple val(meta), val(rel_dir), path(files)
-    val mirror_root
-    val per_sample_root
-    val wait_seconds
-
-    output:
-    path ".mirror_published_files.done", emit: done
-
-    when:
-    !params.test
-
-    script:
-    def sourceBase = params.outBase(meta).toString()
-    """
-    set -euo pipefail
-
-    SOURCE_BASE="${sourceBase}"
-    REL_DIR="${rel_dir}"
-    MIRROR_ROOT="${mirror_root}"
-    PER_SAMPLE_ROOT="${per_sample_root}"
-    PER_SAMPLE_ROOT="\${PER_SAMPLE_ROOT%/}"
-    WAIT_SECONDS="${wait_seconds}"
-
-    case "\$SOURCE_BASE" in
-        "\$PER_SAMPLE_ROOT"/singleSamples/*|"\$PER_SAMPLE_ROOT"/intRefSamples/*) ;;
-        *)
-            touch .mirror_published_files.done
-            exit 0
-            ;;
-    esac
-
-    SOURCE_PUBLISH_DIR="\$SOURCE_BASE/\$REL_DIR"
-    REL_SAMPLE="\${SOURCE_BASE#\$PER_SAMPLE_ROOT/}"
-    DEST_DIR="\$MIRROR_ROOT/\$REL_SAMPLE/\$REL_DIR"
-
-    mkdir -p "\$DEST_DIR"
-
-    link_one_file() {
-        local src="\$1"
-        local dst="\$2"
-
-        mkdir -p "\$(dirname "\$dst")"
-
-        if [ -L "\$dst" ]; then
-            local existing
-            existing="\$(readlink "\$dst")"
-            if [ "\$existing" = "\$src" ]; then
-                return 0
-            fi
-            rm -f "\$dst"
-        fi
-
-        if [ -e "\$dst" ]; then
-            return 0
-        fi
-
-        ln -s "\$src" "\$dst"
-    }
-
-    mirror_source_path() {
-        local published_path="\$1"
-        local dest_path="\$2"
-
-        if [ -d "\$published_path" ]; then
-            (
-                cd "\$published_path"
-                find . -type d -print0 |
-                while IFS= read -r -d '' d; do
-                    clean_d="\${d#./}"
-                    [ "\$clean_d" = "." ] && continue
-                    mkdir -p "\$dest_path/\$clean_d"
-                done
-
-                find . -type f -print0 |
-                while IFS= read -r -d '' f; do
-                    clean_f="\${f#./}"
-                    link_one_file "\$published_path/\$clean_f" "\$dest_path/\$clean_f"
-                done
-            )
-        elif [ -f "\$published_path" ]; then
-            link_one_file "\$published_path" "\$dest_path"
-        fi
-    }
-
-    for staged in ${files}; do
-        base="\$(basename "\$staged")"
-        published="\$SOURCE_PUBLISH_DIR/\$base"
-
-        waited=0
-        while [ ! -e "\$published" ] && [ "\$waited" -lt "\$WAIT_SECONDS" ]; do
-            sleep 1
-            waited=\$((waited + 1))
-        done
-
-        if [ ! -e "\$published" ]; then
-            # Nogle process-output indeholder filer, som ikke matches af processens publishDir-pattern.
-            # De skal bare ignoreres her.
-            continue
-        fi
-
-        mirror_source_path "\$published" "\$DEST_DIR/\$base"
-    done
-
-    touch .mirror_published_files.done
-    """
-}
 
 
 workflow {
 
-    if (params.vspipelineOnly) {
-
-        samplesheet_full
-        | filter { meta ->
-            if (params.singleOnly) {
-                return meta.groupKey == 'single'
-            }
-            return true
-        }
-        | filter { meta ->
-            def normalizedTestlist = (meta.testlist ?: '')
-                .toString()
-                .trim()
-                .replaceAll('-', '_')
-
-            def requestedTestlist = (params.vspipeline_testlist ?: '')
-                .toString()
-                .trim()
-                .replaceAll('-', '_')
-
-            if (requestedTestlist) {
-                return normalizedTestlist == requestedTestlist
-            }
-
-            def configuredVspipelineTestlists = (params.vspipeline_configs ?: [
-                SL_NGC_HJERTESYGDOM : [:],
-                SL_NGC_UNGE_VOKSNE  : [:],
-                SL_NGC_ARVELIG_KRFT : [:],
-                SL_NGC_NEUROGENETIK : [:],
-                SL_LWG_GENOM        : [:],
-                SL_NGC_SJAELDNE     : [:],
-                SL_NGC_NYRESVIGT    : [:],
-                SL_NGC_ENDOKRINOLOG : [:],
-                SL_NGC_OFTALMOLOGI  : [:],
-                SL_NGC_HUDSYGDOM    : [:],
-                SL_LWG_CNV          : [:]
-            ]).keySet()
-
-            return configuredVspipelineTestlists.contains(normalizedTestlist)
-        }
-        | map { meta ->
-            def sampleBase = "${meta.id}.${genome_version}.${readSubset_hifiDefault}"
-            def outBase = params.outBase(meta).toString()
-
-            def data = [
-                bam             : "${outBase}/alignments/HifiReads/${sampleBase}.hiphase.bam",
-                bai             : "${outBase}/alignments/HifiReads/${sampleBase}.hiphase.bam.bai",
-                dv_vcf          : "${outBase}/SNV_and_INDELs/${sampleBase}.hiphase.deepvariant.vcf.gz",
-                dv_idx          : "${outBase}/SNV_and_INDELs/${sampleBase}.hiphase.deepvariant.vcf.gz.tbi",
-                sawfish10_vcf   : "${outBase}/structuralVariants/vcfs/${sampleBase}.sawfishSV.hiphase.svdb.AF_below10pct.vcf.gz",
-                sawfish10_idx   : "${outBase}/structuralVariants/vcfs/${sampleBase}.sawfishSV.hiphase.svdb.AF_below10pct.vcf.gz.tbi"
-            ]
-
-            tuple(meta, data)
-        }
-        | set { vspipeline_input_ch }
-
-    }
-    else {
-
     if (!params.aligned) {
-        if (!params.test) {
-            write_input_summary(ubam_size_summary_ch)
-            write_analyzed_samples_summary(ubam_size_keep_ch)
-            write_dropped_samples_summary(ubam_size_dropped_ch)
-            symlinks_ubam_dropped(ubam_ss_merged_size_split.drop)
-        }
+        write_input_summary(ubam_size_summary_ch)
+        write_analyzed_samples_summary(ubam_size_keep_ch)
+        write_dropped_samples_summary(ubam_size_dropped_ch)
+        symlinks_ubam_dropped(ubam_ss_merged_size_split.drop)
         PREPROCESS(finalUbamInput)
     }
     PRE_PHASING(PREPROCESS.out.alignedFinal)
 
-    hiPhase(PRE_PHASING.out.hiphaseInput)
+   // hiPhase(PRE_PHASING.out.hiphaseInput)
+    hiPhaseTwoAln(PRE_PHASING.out.hiphaseInput)
+    
+    hiPhaseTwoAln.out.hifi_bam
 
-    hiPhase.out.hiphase_bam
-        .join(hiPhase.out.hiphase_dv_vcf)
-        .join(hiPhase.out.hiphase_sawfish_vcf)
+        .join(hiPhase.out.dv_vcf)
+        .join(hiPhase.out.sawfish_vcf)
         .join(PRE_PHASING.out.sawfish_supporting_reads)
         | map { meta, bam, bai, dv_vcf, dv_idx, sv_vcf, sv_idx, sv_jsonReads ->
             tuple(meta, [
@@ -768,65 +448,13 @@ workflow {
                 PRE_PHASING.out.nanoStat
                 )
 
+    def hpo_ch = params.hpo        
+        ? channel.fromPath(params.hpo)
+        : channel.empty()
 
-    if (!params.test && params.genome == "hg38" && !params.skipVariants && !params.skipSV) {
-        phasedAll
-        .join(POST_PHASING.out.sawfishAF10)
-        | map { meta, data, sv10_vcf, sv10_idx ->
-            tuple(meta, data + [sawfish10_vcf: sv10_vcf, sawfish10_idx: sv10_idx])
-        }
-        | filter { meta, data ->
-            def normalizedTestlist = (meta.testlist ?: '')
-                .toString()
-                .trim()
-                .replaceAll('-', '_')
-
-            def requestedTestlist = (params.vspipeline_testlist ?: '')
-                .toString()
-                .trim()
-                .replaceAll('-', '_')
-
-            if (requestedTestlist) {
-                return normalizedTestlist == requestedTestlist
-            }
-
-            def configuredVspipelineTestlists = (params.vspipeline_configs ?: [
-                SL_NGC_HJERTESYGDOM : [:],
-                SL_NGC_UNGE_VOKSNE  : [:],
-                SL_NGC_ARVELIG_KRFT : [:],
-                SL_NGC_NEUROGENETIK : [:],
-                SL_LWG_GENOM        : [:],
-                SL_NGC_SJAELDNE     : [:],
-                SL_NGC_NYRESVIGT    : [:],
-                SL_NGC_ENDOKRINOLOG : [:],
-                SL_NGC_OFTALMOLOGI  : [:],
-                SL_NGC_HUDSYGDOM    : [:],
-                SL_LWG_CNV          : [:]
-            ]).keySet()
-
-            return configuredVspipelineTestlists.contains(normalizedTestlist)
-        }
-        | set { vspipeline_input_ch }
-
-    }
-    else {
-        channel.empty()
-        | set { vspipeline_input_ch }
-    }
-
-    if (params.hpo) {
-        channel.fromPath(params.hpo) | set { hpo_ch }
-    }
-    else {
-        channel.empty() | set { hpo_ch }
-    }
-
-    if (params.samplesheet) {
-        channel.fromPath(params.samplesheet) | set { ss_ch }
-    }
-    else {
-        channel.empty() | set { ss_ch }
-    }
+    def ss_ch  = params.samplesheet 
+        ? channel.fromPath(params.samplesheet) 
+        : channel.empty()
 
 
     if (params.jointCall || params.jointSS) {
@@ -876,168 +504,51 @@ workflow {
                         ss_ch
                         )
 
-        FAMILY_ANALYSIS.out.done
-        | set { family_analysis_done_ch }
-
-        FAMILY_ANALYSIS.out.mirror_items
-        | set { family_analysis_mirror_items_ch }
     }
-    else {
-        channel.empty()
-        | set { family_analysis_done_ch }
-
-        channel.empty()
-        | set { family_analysis_mirror_items_ch }
-    }
-
-    mirror_items_ch = channel.empty()
-    mirror_items_ch = mirror_items_ch.mix(PREPROCESS.out.mirror_items)
-    mirror_items_ch = mirror_items_ch.mix(PRE_PHASING.out.mirror_items)
-    mirror_items_ch = mirror_items_ch.mix(hiPhase.out.hiphase_bam.map { meta, bam, bai -> tuple(meta, 'alignments/HifiReads', [bam, bai]) })
-    mirror_items_ch = mirror_items_ch.mix(hiPhase.out.hiphase_dv_vcf.map { meta, vcf, tbi -> tuple(meta, 'SNV_and_INDELs', [vcf, tbi]) })
-    mirror_items_ch = mirror_items_ch.mix(hiPhase.out.hiphase_trgt_vcf.map { meta, vcf, tbi -> tuple(meta, 'repeatExpansions/TRGT/diseaseSTRs', [vcf, tbi]) })
-    mirror_items_ch = mirror_items_ch.mix(hiPhase.out.hiphase_dv_wes_roi_vcf.map { meta, vcf, tbi -> tuple(meta, 'SNV_and_INDELs', [vcf, tbi]) })
-    mirror_items_ch = mirror_items_ch.mix(POST_PHASING.out.mirror_items)
-    mirror_items_ch = mirror_items_ch.mix(family_analysis_mirror_items_ch)
-
-    MIRROR_PUBLISHED_FILES(
-        mirror_items_ch,
-        params.symlink_mirror_dir,
-        params.symlink_per_sample_root,
-        params.symlink_publish_wait_seconds
-    )
-    }
-
-    VSpipeline(vspipeline_input_ch)
 }
 
-/*
+// Virker ikke lige pt.:
+workflow.onComplete {
 
-        PRE_PHASING.out.sawfish_discover_dir
-        | map {" --sample "+it}
-        |collectFile(name: "sawfish_discover_dir_list.csv", newLine: false)
-        |map {it.text.trim()}
-        |set {sawfish_discover_bam_list_ch}
-
-
-    if (params.test ||params.summary) {
-        finalUbamInput.view()
-        samplesheet_full.view()
-        write_input_summary(ubam_size_summary_ch)
-        write_analyzed_samples_summary(ubam_size_keep_ch)
-        write_dropped_samples_summary(ubam_size_dropped_ch)
-        symlinks_ubam_dropped(ubam_ss_merged_size_split.drop)
+    if( !params.createSymlinks ) {
+        log.info "Symlink maintenance disabled by config."
+        return
     }
 
+    if( !workflow.success ) {
+        log.warn "Workflow failed – skipping symlink maintenance."
+        return
+    }
 
+    def mirrorScript  = params.mirrorSampleData
+    def collectScript = params.collectDataTypeSymlink
 
-        if (!params.skipQC) {
+    if( !mirrorScript || !collectScript ) {
+        log.warn "Symlink script paths not defined in config – skipping."
+        return
+    }
 
-            channel.empty()
-            .mix(QC.out.mosdepth)
-            .mix(QC.out.nanoStat)
-            .mix(whatsHap_stats.out.multiqc)
-            .map { meta, qcfile ->
-                tuple(params.multiqcKey(meta), meta, qcfile)
+    def cmds = [
+        "bash '${collectScript}'",
+        "bash '${mirrorScript}'"
+        
+    ]
+
+    cmds.each { cmd ->
+        log.info "onComplete: running: ${cmd}"
+
+        try {
+            def p = ["bash", "-lc", cmd].execute()
+            p.waitForProcessOutput(System.out, System.err)
+
+            if( p.exitValue() != 0 ) {
+                log.warn "onComplete: command failed (exit ${p.exitValue()}): ${cmd}"
+            } else {
+                log.info "onComplete: finished OK: ${cmd}"
             }
-            .groupTuple(by: 0)
-            .map { key, metas, qcfiles ->
-
-                // pick one representative meta for publishDir + naming
-                def meta0 = metas.find { it.relation == 'index' } ?: metas[0]
-
-                tuple(meta0, qcfiles)
-            }
-            .set { multiqc_inputs_ch }
-            multiQC(multiqc_inputs_ch)
         }
-
-
-
-        hiPhase.out.hiphase_bam
-        .join(svdb_SawFish.out.sawfishAF10)
-        .join(STRUCTURALVARIANTS.out.sawfish_supporting_reads)
-        | map {meta,bam,bai,sv10_vcf,sv10_idx,sv_jsonReads -> 
-        tuple(meta,[bam:bam,bai:bai,sawfish10_vcf:sv10_vcf,sawfish10_idx:sv10_idx,sawfish_reads:sv_jsonReads])}
-        |set {phasedSawfishAF10}   
-
-        svTopo_filtered(phasedSawfishAF10)
-
-
-
-    if (params.hpo && params.samplesheet && (params.jointCall || params.jointSS)) {
-    
-    glNexus_jointCall.out.glnexus_vcf
-    .combine(hpo_ch)
-    .combine(samplesheet_path_ch)
-    |set {genomiser_ch}
-    
-    glNexus_jointCall.out.glnexus_wes_roi_vcf
-    .combine(hpo_ch)
-    .combine(samplesheet_path_ch)
-    |set {exomiser_ch}
-    
-    svdb_sawFish2_jointCall_caseID.out.sawfish_caseID_AF10
-    .combine(hpo_ch)
-    .combine(samplesheet_path_ch)
-    |set {exomiserSV_ch}
-        //above structure: caseID, vcf, idx, hpoFile,samplesheet
-        exo14_2508_exome(exomiser_ch)
-        exo14_2508_genome(genomiser_ch)
-        exo14_2508_SV(exomiserSV_ch)
+        catch(Exception e) {
+            log.warn "onComplete: exception while running '${cmd}': ${e.message}"
+        }
     }
-
-
- include {pbmm2_align;
-        create_fofn;
-        pbmm2_align_mergedData;
-        extractHifi;
-        inputFiles_symlinks_ubam;
-        sawFish2;
-        svdb_SawFish;
-        sawFish2_jointCall_all;
-        svdb_sawFish2_jointCall_all;
-        sawFish2_jointCall_caseID;
-        svdb_sawFish2_jointCall_caseID;
-        deepvariant;
-        glNexus_jointCall;
-        trgt4_diseaseSTRs;
-        trgt4_diseaseSTRs_plots;
-        trgt4_diseaseSTRs_plots_meth;
-        trgt4_all;
-        trgt5_diseaseSTRs;
-        trgt5_diseaseSTRs_plots;
-        trgt5_diseaseSTRs_plots_meth;
-        kivvi_d4z4;
-        pbCPGtools;
-        paraphase;
-        paraphase35
-        starphase;
-        methBat;
-        multiQC;
-        multiQC_ALL;
-        mosdepthROI;
-        cramino;
-        nanoStat;
-        whatsHap_stats;
-        hiPhase;
-        build_symlinks;
-        check_tmpdir;
-        svTopo;
-        svTopo_filtered;
-        mitorsaw;
-        exo14_2508_exome;
-        exo14_2508_genome;
-        exo14_2508_SV;
-        kivvi05_d4z4;
-        write_input_summary;
-        write_dropped_samples_summary;
-        symlinks_ubam_dropped;
-        write_analyzed_samples_summary;
-        } from "./modules/dnaModules.nf" 
-
-
-
-
-
-*/
+}
