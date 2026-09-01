@@ -31,13 +31,14 @@ workflow PRE_PHASING {
     hiphase_input_ch    = Channel.empty()
 
     if (!params.skipVariants) {
-        deepvariant(aligned)
+    deepvariant(aligned)
 
-        deepvariant.out.vcf
-//            .map { meta, vcf, idx -> tuple(meta, [dvVcf: vcf, dvTbi: idx]) }
-            .map { meta, vcf, idx -> tuple(meta, [dvVcf: vcf]) }
+    deepvariant.out.vcf
+        .map { meta, vcf, idx -> tuple(meta, [dvVcf: vcf]) }
+        .set { dv_vcf_ch }
+}
 
-            .set { dv_vcf_ch }
+if (!params.skipSV) {
     
     if (!params.skipSV) {
         sawFish2(aligned)
